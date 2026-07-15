@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>بوابة النظام | حلقات الحديث</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="global-loader"><div class="spinner"></div></div>
+
+    <div id="login-screen" class="wathbah-login-theme" style="display: none">
+      <div class="auth-card">
+        <div class="auth-header">
+          <h1 class="brand-title">أهلاً بك في حلقات الحديث</h1>
+          <p class="brand-subtitle">يرجى تحديد صفتك وتسجيل الدخول بأمان</p>
+        </div>
+        <form id="login-form">
+          <div class="input-group">
+            <select id="role-select" class="w-input" required>
+              <option value="" disabled selected>تحديد المنصب...</option>
+              <option value="admin">إدارة الحلقات</option>
+              <option value="supervisor">إشراف تعليمي</option>
+              <option value="teacher">معلم حلقة</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <select id="user-select" class="w-input" required disabled>
+              <option value="" disabled selected>حساب المستخدم</option>
+            </select>
+          </div>
+          <button type="submit" id="btn-submit" class="w-btn-submit" disabled>
+            دخول
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div id="main-app-content" class="app-layout" style="display: none">
+      <header class="mobile-header">
+        <h2 style="font-size: 1.2rem">إدارة الحلقات</h2>
+        <button class="mobile-menu-btn" id="mobile-menu-toggle">☰</button>
+      </header>
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h2 class="brand-title-small">إدارة الحلقات - الحديث</h2>
+          <p class="user-name-display" id="current-user-name">
+            جارِ التحميل...
+          </p>
+        </div>
+        <nav class="side-nav">
+          <button
+            class="nav-btn active"
+            data-target="dashboard"
+            data-permission="view_dashboard"
+          >
+            📊 لوحة التحكم
+          </button>
+          <button
+            class="nav-btn"
+            data-target="students"
+            data-permission="manage_students"
+          >
+            👥 إدارة البيانات الأساسية
+          </button>
+          <button
+            class="nav-btn"
+            data-target="tracks"
+            data-permission="manage_tracks"
+          >
+            🛤️ إدارة المسارات
+          </button>
+          <button
+            class="nav-btn"
+            data-target="manage-circles"
+            data-permission="manage_circles"
+          >
+            🔄 إدارة الحلقات
+          </button>
+          <button
+            class="nav-btn"
+            data-target="admin-records"
+            data-permission="manage_all_records"
+          >
+            📋 سجل الطلاب الشامل
+          </button>
+          <button
+            class="nav-btn"
+            data-target="daily-tracking"
+            data-permission="record_attendance"
+          >
+            📝 متابعة الحلقة اليومية
+          </button>
+          <button
+            class="nav-btn"
+            data-target="reports"
+            data-permission="view_reports"
+          >
+            📄 التقارير
+          </button>
+          <button
+            class="nav-btn"
+            data-target="settings"
+            data-permission="manage_settings"
+          >
+            ⚙️ إعدادات النظام
+          </button>
+          <button
+            class="nav-btn"
+            data-target="logs"
+            data-permission="view_audit_logs"
+          >
+            🛡️ سجل العمليات
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <button id="logout-btn" class="btn-logout">تسجيل الخروج</button>
+          <div class="academic-approval">
+            تمت المراجعة والاعتماد<br />جمعية الدعوة
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <div id="dashboard" class="app-section active">
+          <div class="top-page-header">
+            <div></div>
+            <h2>نظرة عامة ⏳</h2>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>الطلاب المسجلين</h3>
+              <p class="stat-value" id="dash-students-count">0</p>
+            </div>
+            <div class="stat-card gold">
+              <h3>نسبة الحضور اليوم</h3>
+              <p class="stat-value" id="dash-attendance-rate">0%</p>
+            </div>
+            <div class="stat-card gold">
+              <h3>متوسط إنجاز المنهج</h3>
+              <p class="stat-value" id="dash-progress-rate">0%</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="tracks" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>إدارة المسارات والمقررات 🛤️</h2>
+          </div>
+          <div class="content-card">
+            <h3 class="content-card-title">إضافة مسار جديد</h3>
+            <form
+              id="add-track-form"
+              style="
+                display: flex;
+                gap: 1rem;
+                align-items: flex-end;
+                flex-wrap: wrap;
+              "
+            >
+              <div class="input-group" style="flex: 1; margin: 0">
+                <input
+                  type="text"
+                  id="track-name-input"
+                  class="modern-input"
+                  placeholder="اسم المسار (مثلاً: بلوغ المرام - النصف الأول)..."
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                class="btn-submit"
+                style="width: auto; margin: 0; padding: 0.9rem 2rem"
+              >
+                حفظ المسار
+              </button>
+            </form>
+          </div>
+          <div class="table-wrapper">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>م</th>
+                  <th>اسم المسار</th>
+                  <th>إجراءات (تعديل الاسم والمقررات)</th>
+                </tr>
+              </thead>
+              <tbody id="tracks-list-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="students" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>إدارة البيانات الأساسية 👥</h2>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+              gap: 1.5rem;
+              margin-bottom: 2rem;
+            "
+          >
+            <div class="content-card" style="margin-bottom: 0">
+              <h3 class="content-card-title">إضافة طالب</h3>
+              <form id="add-student-form">
+                <div class="input-group">
+                  <input
+                    type="text"
+                    id="stu-name"
+                    class="modern-input"
+                    placeholder="اسم الطالب"
+                    required
+                  />
+                </div>
+                <div class="input-group">
+                  <select id="stu-level" class="modern-input" required>
+                    <option value="" disabled selected>المرحلة</option>
+                    <option value="الابتدائية">الابتدائية</option>
+                    <option value="المتوسطة">المتوسطة</option>
+                    <option value="الثانوية">الثانوية</option>
+                    <option value="الجامعة">الجامعة</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <select id="stu-track" class="modern-input" required></select>
+                </div>
+                <button type="submit" class="btn-submit">تسجيل الطالب</button>
+              </form>
+            </div>
+
+            <div class="content-card" style="margin-bottom: 0">
+              <h3 class="content-card-title">إضافة معلم</h3>
+              <form id="add-teacher-form">
+                <div class="input-group">
+                  <input
+                    type="text"
+                    id="teacher-name"
+                    class="modern-input"
+                    placeholder="اسم المعلم"
+                    required
+                  />
+                </div>
+                <div class="input-group">
+                  <input
+                    type="password"
+                    id="teacher-pin"
+                    class="modern-input"
+                    placeholder="الرقم السري (4 أرقام)"
+                    maxlength="4"
+                    required
+                  />
+                </div>
+                <button type="submit" class="btn-submit">حفظ المعلم</button>
+              </form>
+            </div>
+
+            <div
+              class="content-card"
+              style="margin-bottom: 0"
+              id="add-supervisor-card"
+            >
+              <h3 class="content-card-title">إضافة مشرف</h3>
+              <form id="add-supervisor-form">
+                <div class="input-group">
+                  <input
+                    type="text"
+                    id="supervisor-name"
+                    class="modern-input"
+                    placeholder="اسم المشرف"
+                    required
+                  />
+                </div>
+                <div class="input-group">
+                  <input
+                    type="tel"
+                    id="supervisor-phone"
+                    class="modern-input"
+                    placeholder="رقم الجوال"
+                    required
+                  />
+                </div>
+                <div class="input-group">
+                  <input
+                    type="password"
+                    id="supervisor-pin"
+                    class="modern-input"
+                    placeholder="الرقم السري (4 أرقام)"
+                    maxlength="4"
+                    required
+                  />
+                </div>
+                <button type="submit" class="btn-submit">حفظ المشرف</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>اسم الطالب</th>
+                  <th>المرحلة</th>
+                  <th>المسار</th>
+                  <th>الحلقة</th>
+                  <th>تعديل</th>
+                </tr>
+              </thead>
+              <tbody id="students-list-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="manage-circles" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>إدارة الحلقات وتوزيع الطلاب 🔄</h2>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+              gap: 1.5rem;
+              margin-bottom: 2rem;
+            "
+          >
+            <div class="content-card" style="margin-bottom: 0">
+              <h3 class="content-card-title">تأسيس حلقة جديدة</h3>
+              <form id="new-circle-form">
+                <div class="input-group">
+                  <label>اسم الحلقة</label
+                  ><input
+                    type="text"
+                    id="new-circle-name"
+                    class="modern-input"
+                    placeholder="مثال: حلقة البخاري"
+                    required
+                  />
+                </div>
+                <div class="input-group">
+                  <label>المعلم المكلف</label
+                  ><select
+                    id="new-circle-teacher"
+                    class="modern-input"
+                    required
+                  ></select>
+                </div>
+                <button type="submit" class="btn-submit">حفظ الحلقة</button>
+              </form>
+            </div>
+            <div class="content-card" style="margin-bottom: 0">
+              <h3 class="content-card-title">توزيع الطلاب على الحلقات</h3>
+              <form id="assign-students-form">
+                <div class="input-group">
+                  <label>اختر الحلقة</label
+                  ><select
+                    id="assign-circle-select"
+                    class="modern-input"
+                    required
+                  ></select>
+                </div>
+                <div class="input-group">
+                  <label>اختر الطلاب لضمهم لهذه الحلقة:</label>
+                  <div
+                    id="unassigned-students-list"
+                    style="
+                      max-height: 180px;
+                      overflow-y: auto;
+                      border: 1px solid var(--border-color);
+                      padding: 10px;
+                      border-radius: var(--radius-sm);
+                      background: #f8fafc;
+                    "
+                  >
+                    <p
+                      style="
+                        color: gray;
+                        font-size: 0.85rem;
+                        text-align: center;
+                      "
+                    >
+                      اختر حلقة أولاً
+                    </p>
+                  </div>
+                </div>
+                <button type="submit" class="btn-submit">حفظ التوزيع</button>
+              </form>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>م</th>
+                  <th>اسم الحلقة</th>
+                  <th>المعلم</th>
+                  <th>عدد الطلاب</th>
+                  <th>إجراءات (تعديل الحلقة)</th>
+                </tr>
+              </thead>
+              <tbody id="circles-list-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="admin-records" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>سجل الطلاب الشامل 📋</h2>
+          </div>
+          <div class="content-card">
+            <div
+              style="
+                display: flex;
+                gap: 15px;
+                align-items: center;
+                margin-bottom: 1.5rem;
+                background: var(--primary-light);
+                padding: 15px;
+                border-radius: var(--radius-sm);
+                border: 1px solid var(--border-color);
+              "
+            >
+              <label
+                style="
+                  font-weight: bold;
+                  color: var(--primary-blue);
+                  font-size: 1.1rem;
+                "
+                >📅 تعديل/عرض حضور يوم:</label
+              >
+              <input
+                type="date"
+                id="admin-record-date"
+                class="modern-input"
+                style="width: auto; padding: 0.5rem"
+              />
+              <span style="color: var(--text-gray); font-size: 0.9rem"
+                >(يمكنك اختيار أي يوم لتعديل حضور الطلاب فيه)</span
+              >
+            </div>
+            <div class="table-wrapper">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>اسم الطالب</th>
+                    <th>المرحلة</th>
+                    <th>المسار</th>
+                    <th>الحلقة</th>
+                    <th>نسبة الحضور</th>
+                    <th>نسبة الإنجاز</th>
+                    <th>حضور (اليوم المحدد)</th>
+                    <th>إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-records-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="daily-tracking" class="app-section">
+          <div
+            class="top-page-header"
+            style="
+              align-items: flex-end;
+              gap: 1rem;
+              border-bottom: none;
+              padding-bottom: 0;
+            "
+          >
+            <div>
+              <h2 style="font-size: 1.5rem">متابعة الحلقة (حضور وتسميع) 📝</h2>
+            </div>
+            <input
+              type="text"
+              id="student-search-input"
+              class="modern-input"
+              placeholder="🔍 بحث عن طالب..."
+              style="border-width: 2px; width: 300px; max-width: 100%"
+            />
+          </div>
+          <div class="daily-target-banner" id="daily-target-banner"></div>
+          <div
+            id="tracking-cards-container"
+            style="display: grid; grid-template-columns: 1fr; gap: 1.5rem"
+          ></div>
+        </div>
+
+        <div id="reports" class="app-section">
+          <div class="top-page-header">
+            <button
+              class="btn-submit print-hide"
+              onclick="window.print()"
+              style="width: auto; margin: 0"
+            >
+              🖨️ طباعة التقرير
+            </button>
+            <h2>التقارير اليومية 📄</h2>
+          </div>
+          <div class="content-card print-hide">
+            <div style="display: flex; gap: 10px; align-items: flex-end">
+              <div class="input-group" style="margin: 0; flex: 1">
+                <label>تاريخ التقرير</label
+                ><input
+                  type="date"
+                  id="report-date-input"
+                  class="modern-input"
+                />
+              </div>
+              <button
+                class="btn-submit"
+                id="generate-report-btn"
+                style="width: auto; margin: 0; padding: 0.9rem 2rem"
+              >
+                بحث وعرض
+              </button>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <h3
+              style="
+                padding: 1rem;
+                text-align: center;
+                color: var(--primary-blue);
+              "
+              id="report-table-title"
+            >
+              تقرير يوم: --
+            </h3>
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>الطالب</th>
+                  <th>الحلقة</th>
+                  <th>الحضور</th>
+                  <th>ما تم إنجازه اليوم</th>
+                  <th>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody id="reports-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="settings" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>إعدادات النظام ⚙️</h2>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+              gap: 1.5rem;
+            "
+          >
+            <div class="content-card">
+              <h3 class="content-card-title">تغيير الرقم السري</h3>
+              <form id="password-change-form">
+                <div class="input-group">
+                  <input
+                    type="password"
+                    id="new-pin"
+                    class="modern-input"
+                    placeholder="الرقم السري الجديد (4 أرقام)"
+                    pattern="\d{4}"
+                    maxlength="4"
+                    required
+                  />
+                </div>
+                <button type="submit" class="btn-submit">تحديث البيانات</button>
+              </form>
+            </div>
+            <div class="content-card">
+              <h3 class="content-card-title">التواصل والدعم</h3>
+              <div
+                style="
+                  background: var(--bg-main);
+                  padding: 1rem;
+                  border-radius: var(--radius-sm);
+                  margin-bottom: 1rem;
+                  border: 1px solid var(--border-color);
+                "
+              >
+                <strong>📞 الدعم الفني:</strong> <br /><a
+                  href="#"
+                  style="color: var(--primary-blue); text-decoration: none"
+                  >support@dawah.org</a
+                >
+              </div>
+              <div
+                style="
+                  background: var(--bg-main);
+                  padding: 1rem;
+                  border-radius: var(--radius-sm);
+                  border: 1px solid var(--border-color);
+                "
+              >
+                <strong>🏢 الإدارة والمشرفين:</strong> <br /><a
+                  href="#"
+                  style="color: var(--primary-blue); text-decoration: none"
+                  >admin@dawah.org</a
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- سجل العمليات 🛡️ المحدث -->
+        <div id="logs" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>سجل العمليات 🛡️</h2>
+          </div>
+          <div class="content-card">
+            <p style="margin-bottom: 1rem">
+              يعرض هذا السجل جميع العمليات الإدارية التي قام بها المشرفون
+              والمدير بالتفصيل.
+            </p>
+            <div class="table-wrapper">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>الوقت والتاريخ</th>
+                    <th>المشرف / المدير</th>
+                    <th>العملية</th>
+                    <th>الحلقة المستهدفة</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-logs-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- نافذة التعديل الشامل -->
+    <div id="edit-modal" class="modal-overlay">
+      <div class="modal-content">
+        <h2
+          style="margin-bottom: 1.5rem; color: var(--primary-blue)"
+          id="edit-modal-title"
+        >
+          تعديل البيانات
+        </h2>
+        <form id="edit-modal-form">
+          <div id="edit-form-fields"></div>
+          <div style="display: flex; gap: 10px; margin-top: 1.5rem">
+            <button type="submit" class="btn-submit" style="margin: 0">
+              حفظ التعديلات
+            </button>
+            <button
+              type="button"
+              class="btn-action"
+              onclick="closeEditModal()"
+              style="margin: 0"
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- نافذة تعديل المقررات -->
+    <div id="schedule-modal" class="modal-overlay">
+      <div class="modal-content" style="max-width: 900px">
+        <h2
+          style="margin-bottom: 1.5rem; color: var(--primary-blue)"
+          id="schedule-modal-title"
+        >
+          تعديل المقررات اليومية
+        </h2>
+        <p
+          style="
+            margin-bottom: 1rem;
+            color: var(--text-gray);
+            font-size: 0.9rem;
+          "
+        >
+          أي تعديل هنا سيتم تحديثه أوتوماتيكياً في شاشة المعلمين.
+        </p>
+        <form id="schedule-modal-form">
+          <div
+            style="
+              max-height: 60vh;
+              overflow-y: auto;
+              margin-bottom: 1rem;
+              border: 1px solid var(--border-color);
+              border-radius: 6px;
+            "
+          >
+            <table class="schedule-table">
+              <thead>
+                <tr>
+                  <th>اليوم</th>
+                  <th>مقرر الحفظ الجديد</th>
+                  <th>مقرر التثبيت</th>
+                  <th>مقرر المراجعة</th>
+                </tr>
+              </thead>
+              <tbody id="schedule-modal-tbody"></tbody>
+            </table>
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 1.5rem">
+            <button type="submit" class="btn-submit" style="margin: 0">
+              حفظ المقررات
+            </button>
+            <button
+              type="button"
+              class="btn-action"
+              onclick="closeScheduleModal()"
+              style="margin: 0"
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const sidebar = document.getElementById("sidebar");
+        const toggleBtn = document.getElementById("mobile-menu-toggle");
+        const overlay = document.getElementById("sidebar-overlay");
+        const navBtns = document.querySelectorAll(".nav-btn");
+        if (toggleBtn && sidebar && overlay) {
+          toggleBtn.addEventListener("click", () => {
+            sidebar.classList.add("open");
+            overlay.classList.add("active");
+          });
+          overlay.addEventListener("click", () => {
+            sidebar.classList.remove("open");
+            overlay.classList.remove("active");
+          });
+          navBtns.forEach((btn) => {
+            btn.addEventListener("click", () => {
+              if (window.innerWidth <= 768) {
+                sidebar.classList.remove("open");
+                overlay.classList.remove("active");
+              }
+            });
+          });
+        }
+      });
+    </script>
+    <script src="firebase.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
