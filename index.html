@@ -11,6 +11,19 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <!-- شريط التنبيه بانقطاع الإنترنت -->
+    <div id="offline-banner">
+      ⚠️ انقطع الاتصال بالإنترنت! النظام يعمل الآن في وضع عدم الاتصال ويحفظ
+      بياناتك محلياً بشكل آمن.
+    </div>
+
+    <!-- صورة العلامة المائية للطباعة لضمان ظهور الشعار -->
+    <img
+      src="شعار برنامج حفظ السنة.jpg.jpeg"
+      class="print-watermark"
+      alt="Watermark"
+    />
+
     <div id="global-loader"><div class="spinner"></div></div>
 
     <div id="login-screen" class="wathbah-login-theme" style="display: none">
@@ -33,8 +46,22 @@
               <option value="" disabled selected>حساب المستخدم</option>
             </select>
           </div>
+          <div
+            class="input-group"
+            id="login-password-group"
+            style="display: none"
+          >
+            <input
+              type="password"
+              id="login-password"
+              class="w-input"
+              placeholder="الرقم السري"
+              required
+              disabled
+            />
+          </div>
           <button type="submit" id="btn-submit" class="w-btn-submit" disabled>
-            دخول
+            تسجيل الدخول
           </button>
         </form>
       </div>
@@ -56,6 +83,13 @@
         </div>
         <nav class="side-nav">
           <button
+            class="nav-btn"
+            data-target="daily-tracking"
+            data-permission="record_attendance"
+          >
+            📝 متابعة الحلقة اليومية
+          </button>
+          <button
             class="nav-btn active"
             data-target="dashboard"
             data-permission="view_dashboard"
@@ -67,7 +101,7 @@
             data-target="students"
             data-permission="manage_students"
           >
-            👥 إدارة البيانات الأساسية
+            👥 إدارة المستفيدين
           </button>
           <button
             class="nav-btn"
@@ -89,13 +123,6 @@
             data-permission="manage_all_records"
           >
             📋 سجل الطلاب الشامل
-          </button>
-          <button
-            class="nav-btn"
-            data-target="daily-tracking"
-            data-permission="record_attendance"
-          >
-            📝 متابعة الحلقة اليومية
           </button>
           <button
             class="nav-btn"
@@ -128,24 +155,48 @@
       </aside>
 
       <main class="main-content">
+        <div id="daily-tracking" class="app-section">
+          <div
+            class="top-page-header"
+            style="
+              align-items: flex-end;
+              gap: 1rem;
+              border-bottom: none;
+              padding-bottom: 0;
+            "
+          >
+            <div>
+              <h2 style="font-size: 1.5rem">متابعة الحلقة (حضور وتسميع) 📝</h2>
+              <button
+                class="btn-action"
+                style="margin-top: 10px"
+                id="global-toggle-btn"
+              >
+                🔄 تبديل وضع التسميع للجميع (شريط/دقيق)
+              </button>
+            </div>
+            <input
+              type="text"
+              id="student-search-input"
+              class="modern-input"
+              placeholder="🔍 بحث عن طالب..."
+              style="border-width: 2px; width: 300px; max-width: 100%"
+            />
+          </div>
+          <div class="daily-target-banner" id="daily-target-banner"></div>
+          <div
+            id="tracking-cards-container"
+            style="display: grid; grid-template-columns: 1fr; gap: 1.5rem"
+          ></div>
+        </div>
+
         <div id="dashboard" class="app-section active">
           <div class="top-page-header">
             <div></div>
-            <h2>نظرة عامة ⏳</h2>
+            <h2>لوحة التحكم 📊</h2>
           </div>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <h3>الطلاب المسجلين</h3>
-              <p class="stat-value" id="dash-students-count">0</p>
-            </div>
-            <div class="stat-card gold">
-              <h3>نسبة الحضور اليوم</h3>
-              <p class="stat-value" id="dash-attendance-rate">0%</p>
-            </div>
-            <div class="stat-card gold">
-              <h3>متوسط إنجاز المنهج</h3>
-              <p class="stat-value" id="dash-progress-rate">0%</p>
-            </div>
+          <div class="stats-grid" id="main-dashboard-grid">
+            <!-- سيتم توليد الإحصائيات هنا برمجياً -->
           </div>
         </div>
 
@@ -200,7 +251,7 @@
         <div id="students" class="app-section">
           <div class="top-page-header">
             <div></div>
-            <h2>إدارة البيانات الأساسية 👥</h2>
+            <h2>إدارة المستفيدين 👥</h2>
           </div>
           <div
             style="
@@ -210,7 +261,11 @@
               margin-bottom: 2rem;
             "
           >
-            <div class="content-card" style="margin-bottom: 0">
+            <div
+              class="content-card"
+              style="margin-bottom: 0"
+              id="add-student-card"
+            >
               <h3 class="content-card-title">إضافة طالب</h3>
               <form id="add-student-form">
                 <div class="input-group">
@@ -229,6 +284,7 @@
                     <option value="المتوسطة">المتوسطة</option>
                     <option value="الثانوية">الثانوية</option>
                     <option value="الجامعة">الجامعة</option>
+                    <option value="أعلى من ذلك">أعلى من ذلك</option>
                   </select>
                 </div>
                 <div class="input-group">
@@ -238,7 +294,11 @@
               </form>
             </div>
 
-            <div class="content-card" style="margin-bottom: 0">
+            <div
+              class="content-card"
+              style="margin-bottom: 0"
+              id="add-teacher-card"
+            >
               <h3 class="content-card-title">إضافة معلم</h3>
               <form id="add-teacher-form">
                 <div class="input-group">
@@ -304,7 +364,10 @@
             </div>
           </div>
 
-          <div class="table-wrapper">
+          <h3 class="content-card-title" style="margin-bottom: 1rem">
+            قائمة الطلاب المسجلين
+          </h3>
+          <div class="table-wrapper" style="margin-bottom: 2rem">
             <table class="modern-table">
               <thead>
                 <tr>
@@ -317,6 +380,45 @@
               </thead>
               <tbody id="students-list-body"></tbody>
             </table>
+          </div>
+
+          <div id="teachers-management-section" style="display: none">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1rem;
+                border-top: 2px solid var(--border-color);
+                padding-top: 1.5rem;
+                flex-wrap: wrap;
+                gap: 10px;
+              "
+            >
+              <h3 class="content-card-title" style="margin: 0">
+                سجل المعلمين الشامل (إدارة وتعديل)
+              </h3>
+              <input
+                type="text"
+                id="admin-teacher-search"
+                class="modern-input"
+                placeholder="🔍 بحث عن معلم..."
+                style="width: 250px; padding: 0.5rem"
+              />
+            </div>
+            <div class="table-wrapper">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>اسم المعلم</th>
+                    <th>الرقم السري</th>
+                    <th>الحلقة المكلف بها</th>
+                    <th>تعديل</th>
+                  </tr>
+                </thead>
+                <tbody id="teachers-list-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -347,6 +449,14 @@
                   />
                 </div>
                 <div class="input-group">
+                  <label>المسار المخصص للحلقة</label
+                  ><select
+                    id="new-circle-track"
+                    class="modern-input"
+                    required
+                  ></select>
+                </div>
+                <div class="input-group">
                   <label>المعلم المكلف</label
                   ><select
                     id="new-circle-teacher"
@@ -354,11 +464,23 @@
                     required
                   ></select>
                 </div>
-                <button type="submit" class="btn-submit">حفظ الحلقة</button>
+                <button type="submit" class="btn-submit">
+                  حفظ وتأسيس الحلقة
+                </button>
               </form>
             </div>
             <div class="content-card" style="margin-bottom: 0">
               <h3 class="content-card-title">توزيع الطلاب على الحلقات</h3>
+              <p
+                style="
+                  font-size: 0.85rem;
+                  color: var(--text-gray);
+                  margin-bottom: 10px;
+                "
+              >
+                النظام يوزع الطلاب تلقائياً حسب المسار، استخدم هذا القسم للتعديل
+                الاستثنائي فقط.
+              </p>
               <form id="assign-students-form">
                 <div class="input-group">
                   <label>اختر الحلقة</label
@@ -369,7 +491,7 @@
                   ></select>
                 </div>
                 <div class="input-group">
-                  <label>اختر الطلاب لضمهم لهذه الحلقة:</label>
+                  <label>الطلاب المسجلين في نفس مسار الحلقة:</label>
                   <div
                     id="unassigned-students-list"
                     style="
@@ -392,7 +514,9 @@
                     </p>
                   </div>
                 </div>
-                <button type="submit" class="btn-submit">حفظ التوزيع</button>
+                <button type="submit" class="btn-submit">
+                  حفظ قائمة طلاب الحلقة
+                </button>
               </form>
             </div>
           </div>
@@ -402,7 +526,8 @@
                 <tr>
                   <th>م</th>
                   <th>اسم الحلقة</th>
-                  <th>المعلم</th>
+                  <th>المسار</th>
+                  <th>المعلم المكلّف</th>
                   <th>عدد الطلاب</th>
                   <th>إجراءات (تعديل الحلقة)</th>
                 </tr>
@@ -428,6 +553,7 @@
                 padding: 15px;
                 border-radius: var(--radius-sm);
                 border: 1px solid var(--border-color);
+                flex-wrap: wrap;
               "
             >
               <label
@@ -444,9 +570,13 @@
                 class="modern-input"
                 style="width: auto; padding: 0.5rem"
               />
-              <span style="color: var(--text-gray); font-size: 0.9rem"
-                >(يمكنك اختيار أي يوم لتعديل حضور الطلاب فيه)</span
-              >
+              <input
+                type="text"
+                id="admin-student-search"
+                class="modern-input"
+                placeholder="🔍 بحث بالاسم عن طالب..."
+                style="width: 250px; padding: 0.5rem; margin-right: auto"
+              />
             </div>
             <div class="table-wrapper">
               <table class="modern-table">
@@ -468,47 +598,40 @@
           </div>
         </div>
 
-        <div id="daily-tracking" class="app-section">
-          <div
-            class="top-page-header"
-            style="
-              align-items: flex-end;
-              gap: 1rem;
-              border-bottom: none;
-              padding-bottom: 0;
-            "
-          >
-            <div>
-              <h2 style="font-size: 1.5rem">متابعة الحلقة (حضور وتسميع) 📝</h2>
-            </div>
-            <input
-              type="text"
-              id="student-search-input"
-              class="modern-input"
-              placeholder="🔍 بحث عن طالب..."
-              style="border-width: 2px; width: 300px; max-width: 100%"
-            />
-          </div>
-          <div class="daily-target-banner" id="daily-target-banner"></div>
-          <div
-            id="tracking-cards-container"
-            style="display: grid; grid-template-columns: 1fr; gap: 1.5rem"
-          ></div>
-        </div>
-
         <div id="reports" class="app-section">
-          <div class="top-page-header">
+          <div class="official-print-header">
+            <div>
+              <img
+                src="شعار برنامج حفظ السنة.jpg.jpeg"
+                alt="شعار برنامج حفظ السنة"
+              />
+            </div>
+            <div class="official-print-text">
+              <h1>جمعية الدعوة والإرشاد وتوعية الجاليات</h1>
+              <h2>برنامج حفظ السنة</h2>
+              <p>تقرير إنجاز ومتابعة الطلاب اليومي</p>
+            </div>
+          </div>
+
+          <div class="top-page-header print-hide">
             <button
               class="btn-submit print-hide"
               onclick="window.print()"
               style="width: auto; margin: 0"
             >
-              🖨️ طباعة التقرير
+              🖨️ طباعة التقرير (رسمي)
             </button>
             <h2>التقارير اليومية 📄</h2>
           </div>
           <div class="content-card print-hide">
-            <div style="display: flex; gap: 10px; align-items: flex-end">
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                align-items: flex-end;
+                flex-wrap: wrap;
+              "
+            >
               <div class="input-group" style="margin: 0; flex: 1">
                 <label>تاريخ التقرير</label
                 ><input
@@ -516,6 +639,16 @@
                   id="report-date-input"
                   class="modern-input"
                 />
+              </div>
+              <div
+                class="input-group"
+                style="margin: 0; flex: 1"
+                id="report-filter-group"
+              >
+                <label>تخصيص التقرير (الحلقة)</label>
+                <select id="report-circle-filter" class="modern-input">
+                  <option value="all">كافة الحلقات</option>
+                </select>
               </div>
               <button
                 class="btn-submit"
@@ -526,7 +659,7 @@
               </button>
             </div>
           </div>
-          <div class="table-wrapper">
+          <div class="table-wrapper" style="box-shadow: none; border: none">
             <h3
               style="
                 padding: 1rem;
@@ -555,7 +688,7 @@
         <div id="settings" class="app-section">
           <div class="top-page-header">
             <div></div>
-            <h2>إعدادات النظام ⚙️</h2>
+            <h2>إعدادات النظام والتواصل ⚙️</h2>
           </div>
           <div
             style="
@@ -565,68 +698,84 @@
             "
           >
             <div class="content-card">
-              <h3 class="content-card-title">تغيير الرقم السري</h3>
+              <h3 class="content-card-title">إعدادات الحساب</h3>
               <form id="password-change-form">
                 <div class="input-group">
-                  <input
+                  <label>تغيير الرقم السري</label
+                  ><input
                     type="password"
                     id="new-pin"
                     class="modern-input"
-                    placeholder="الرقم السري الجديد (4 أرقام)"
-                    pattern="\d{4}"
-                    maxlength="4"
+                    placeholder="الرقم السري الجديد"
                     required
                   />
                 </div>
                 <button type="submit" class="btn-submit">تحديث البيانات</button>
               </form>
             </div>
+
             <div class="content-card">
-              <h3 class="content-card-title">التواصل والدعم</h3>
+              <h3 class="content-card-title">التواصل والدعم 📞</h3>
               <div
+                id="dynamic-support-info"
+                style="margin-bottom: 1.5rem"
+              ></div>
+
+              <hr
                 style="
-                  background: var(--bg-main);
-                  padding: 1rem;
-                  border-radius: var(--radius-sm);
+                  border: 0;
+                  border-top: 1px solid var(--border-color);
+                  margin-bottom: 1.5rem;
+                "
+              />
+              <h4
+                style="
+                  font-size: 1rem;
+                  color: var(--primary-blue);
                   margin-bottom: 1rem;
-                  border: 1px solid var(--border-color);
                 "
               >
-                <strong>📞 الدعم الفني:</strong> <br /><a
-                  href="#"
-                  style="color: var(--primary-blue); text-decoration: none"
-                  >support@dawah.org</a
+                إرسال ملاحظة أو طلب دعم:
+              </h4>
+              <form id="support-message-form">
+                <div class="input-group">
+                  <input
+                    type="text"
+                    class="modern-input"
+                    placeholder="عنوان الرسالة (مثال: طلب تعديل بيانات)..."
+                    required
+                  />
+                </div>
+                <div class="input-group">
+                  <textarea
+                    class="modern-input"
+                    rows="3"
+                    placeholder="اكتب رسالتك أو ملاحظاتك هنا..."
+                    required
+                  ></textarea>
+                </div>
+                <button
+                  type="submit"
+                  class="btn-submit"
+                  style="
+                    background: var(--primary-light);
+                    color: var(--primary-blue);
+                    border: 1px solid var(--primary-blue);
+                  "
                 >
-              </div>
-              <div
-                style="
-                  background: var(--bg-main);
-                  padding: 1rem;
-                  border-radius: var(--radius-sm);
-                  border: 1px solid var(--border-color);
-                "
-              >
-                <strong>🏢 الإدارة والمشرفين:</strong> <br /><a
-                  href="#"
-                  style="color: var(--primary-blue); text-decoration: none"
-                  >admin@dawah.org</a
-                >
-              </div>
+                  إرسال الرسالة 🚀
+                </button>
+              </form>
             </div>
           </div>
         </div>
 
-        <!-- سجل العمليات 🛡️ المحدث -->
         <div id="logs" class="app-section">
           <div class="top-page-header">
             <div></div>
             <h2>سجل العمليات 🛡️</h2>
           </div>
           <div class="content-card">
-            <p style="margin-bottom: 1rem">
-              يعرض هذا السجل جميع العمليات الإدارية التي قام بها المشرفون
-              والمدير بالتفصيل.
-            </p>
             <div class="table-wrapper">
               <table class="modern-table">
                 <thead>
@@ -645,7 +794,7 @@
       </main>
     </div>
 
-    <!-- نافذة التعديل الشامل -->
+    <!-- نوافذ التعديل -->
     <div id="edit-modal" class="modal-overlay">
       <div class="modal-content">
         <h2
@@ -673,7 +822,6 @@
       </div>
     </div>
 
-    <!-- نافذة تعديل المقررات -->
     <div id="schedule-modal" class="modal-overlay">
       <div class="modal-content" style="max-width: 900px">
         <h2
@@ -682,15 +830,6 @@
         >
           تعديل المقررات اليومية
         </h2>
-        <p
-          style="
-            margin-bottom: 1rem;
-            color: var(--text-gray);
-            font-size: 0.9rem;
-          "
-        >
-          أي تعديل هنا سيتم تحديثه أوتوماتيكياً في شاشة المعلمين.
-        </p>
         <form id="schedule-modal-form">
           <div
             style="
@@ -730,32 +869,9 @@
       </div>
     </div>
 
-    <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        const sidebar = document.getElementById("sidebar");
-        const toggleBtn = document.getElementById("mobile-menu-toggle");
-        const overlay = document.getElementById("sidebar-overlay");
-        const navBtns = document.querySelectorAll(".nav-btn");
-        if (toggleBtn && sidebar && overlay) {
-          toggleBtn.addEventListener("click", () => {
-            sidebar.classList.add("open");
-            overlay.classList.add("active");
-          });
-          overlay.addEventListener("click", () => {
-            sidebar.classList.remove("open");
-            overlay.classList.remove("active");
-          });
-          navBtns.forEach((btn) => {
-            btn.addEventListener("click", () => {
-              if (window.innerWidth <= 768) {
-                sidebar.classList.remove("open");
-                overlay.classList.remove("active");
-              }
-            });
-          });
-        }
-      });
-    </script>
+    <!-- إضافة مكتبات Firebase الرسمية -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="firebase.js"></script>
     <script src="app.js"></script>
   </body>
