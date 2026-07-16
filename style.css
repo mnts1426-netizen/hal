@@ -35,6 +35,7 @@ body {
   line-height: 1.5;
 }
 
+/* شريط وضع الأوفلاين */
 #offline-banner {
   display: none;
   background-color: var(--danger-btn);
@@ -51,6 +52,7 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
+/* شاشة الدخول */
 .wathbah-login-theme {
   background: linear-gradient(135deg, var(--primary-blue) 0%, #163a75 100%);
   display: flex;
@@ -146,6 +148,7 @@ body {
   }
 }
 
+/* الهيكل والقائمة */
 .app-layout {
   display: flex;
   height: 100vh;
@@ -232,6 +235,7 @@ body {
   background-color: var(--danger-hover);
 }
 
+/* العلامة المائية في خلفية النظام */
 .main-content {
   flex: 1;
   padding: 1.5rem 2rem;
@@ -278,6 +282,7 @@ body {
   }
 }
 
+/* تصغير الهوامش والعناوين */
 .top-page-header {
   display: flex;
   justify-content: space-between;
@@ -295,6 +300,7 @@ body {
   gap: 8px;
 }
 
+/* البطاقات والإدخالات */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -414,6 +420,7 @@ select.w-input {
   border-color: var(--gold-text);
 }
 
+/* الجداول */
 .table-wrapper {
   background: rgba(255, 255, 255, 0.97);
   border-radius: var(--radius-md);
@@ -442,6 +449,7 @@ select.w-input {
   font-size: 0.85rem;
 }
 
+/* الشريط العلوي ومربعات المتابعة */
 .daily-target-banner {
   background: var(--primary-light);
   border: 1px solid var(--border-color);
@@ -498,6 +506,7 @@ select.w-input {
   font-size: 1rem;
 }
 
+/* مربعات الحضور ووقت التسميع */
 .status-radios {
   display: flex;
   gap: 4px;
@@ -562,6 +571,7 @@ select.w-input {
   border: 1px solid #166534;
 }
 
+/* العرض الأفقي والتلوين الذكي */
 .timeline-container {
   width: 100%;
   overflow-x: auto;
@@ -612,6 +622,7 @@ select.w-input {
   text-overflow: ellipsis;
 }
 
+/* مهام التسميع والخطوط (Timeline) */
 .task-item {
   font-size: 0.7rem;
   background: #ffffff;
@@ -655,6 +666,7 @@ select.w-input {
   text-overflow: ellipsis;
 }
 
+/* الإدخال اليدوي */
 .manual-input-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -677,6 +689,7 @@ select.w-input {
   font-size: 0.8rem;
 }
 
+/* القائمة المنسدلة الذكية */
 .dropdown-details {
   background: #f8fafc;
   border: 1px solid var(--border-color);
@@ -710,6 +723,7 @@ select.w-input {
   overflow-y: auto;
 }
 
+/* شبكة الأحاديث الفردية */
 .hadith-grid-container {
   margin-bottom: 12px;
 }
@@ -758,6 +772,7 @@ select.w-input {
   margin: 0;
 }
 
+/* زر التبديل (Toggle Button) */
 .toggle-mode-btn {
   background: var(--primary-light);
   color: var(--primary-blue);
@@ -776,6 +791,7 @@ select.w-input {
   border-color: var(--gold-text);
 }
 
+/* النوافذ المنبثقة */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -833,6 +849,7 @@ select.w-input {
   border-color: var(--gold-text);
 }
 
+/* ترويسة وعلامة مائية للطباعة */
 .official-print-header {
   display: none;
 }
@@ -840,6 +857,7 @@ img.print-watermark {
   display: none;
 }
 
+/* الجوال (تم إصلاح الطبقات هنا) */
 .mobile-header {
   display: none;
   justify-content: space-between;
@@ -847,16 +865,19 @@ img.print-watermark {
   padding: 0.8rem 1.2rem;
   background: var(--primary-blue);
   color: #fff;
-  z-index: 20;
+  z-index: 998;
   border-bottom: 2px solid var(--gold-text);
+  position: relative;
 }
 .mobile-menu-btn {
   background: none;
   border: none;
-  font-size: 1.4rem;
+  font-size: 1.6rem;
   color: #fff;
   cursor: pointer;
+  padding: 5px;
 }
+
 @media (max-width: 768px) {
   .app-layout {
     flex-direction: column;
@@ -864,24 +885,29 @@ img.print-watermark {
   .mobile-header {
     display: flex;
   }
+  /* تم رفع الـ z-index للقائمة لتظهر فوق كل شيء */
   .sidebar {
     position: fixed;
     top: 0;
-    right: -100%;
+    right: -280px;
+    width: 260px;
     height: 100vh;
     transition: right 0.3s ease;
+    z-index: 1000;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
   }
   .sidebar.open {
     right: 0;
   }
+  /* تم رفع الـ z-index للظلال */
   .sidebar-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(15, 43, 91, 0.5);
-    z-index: 5;
+    background: rgba(15, 43, 91, 0.6);
+    z-index: 999;
     display: none;
   }
   .sidebar-overlay.active {
@@ -895,6 +921,9 @@ img.print-watermark {
   }
 }
 
+/* =======================================================
+   طباعة رسمية واحترافية للجمعية
+   ======================================================= */
 @media print {
   body * {
     visibility: hidden;
@@ -912,6 +941,7 @@ img.print-watermark {
     margin: 0;
     background: #fff;
   }
+
   .sidebar,
   .mobile-header,
   .top-page-header button,
