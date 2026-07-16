@@ -11,13 +11,11 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- شريط التنبيه بانقطاع الإنترنت -->
     <div id="offline-banner">
       ⚠️ انقطع الاتصال بالإنترنت! النظام يعمل الآن في وضع عدم الاتصال ويحفظ
       بياناتك محلياً بشكل آمن.
     </div>
 
-    <!-- صورة العلامة المائية للطباعة لضمان ظهور الشعار -->
     <img
       src="شعار برنامج حفظ السنة.jpg.jpeg"
       class="print-watermark"
@@ -55,7 +53,7 @@
               type="password"
               id="login-password"
               class="w-input"
-              placeholder="الرقم السري"
+              placeholder="الرقم السري (مثال للمدير: 0000)"
               required
               disabled
             />
@@ -70,9 +68,26 @@
     <div id="main-app-content" class="app-layout" style="display: none">
       <header class="mobile-header">
         <h2 style="font-size: 1.2rem">إدارة الحلقات</h2>
-        <button class="mobile-menu-btn" id="mobile-menu-toggle">☰</button>
+        <!-- تم وضع كود الفتح الفوري لضمان الاستجابة السريعة في الجوال -->
+        <button
+          class="mobile-menu-btn"
+          onclick="
+            document.getElementById('sidebar').classList.add('open');
+            document.getElementById('sidebar-overlay').classList.add('active');
+          "
+        >
+          ☰
+        </button>
       </header>
-      <div class="sidebar-overlay" id="sidebar-overlay"></div>
+      <!-- تم وضع كود الإغلاق الفوري هنا -->
+      <div
+        class="sidebar-overlay"
+        id="sidebar-overlay"
+        onclick="
+          document.getElementById('sidebar').classList.remove('open');
+          this.classList.remove('active');
+        "
+      ></div>
 
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -86,6 +101,14 @@
             class="nav-btn"
             data-target="daily-tracking"
             data-permission="record_attendance"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             📝 متابعة الحلقة اليومية
           </button>
@@ -93,6 +116,14 @@
             class="nav-btn active"
             data-target="dashboard"
             data-permission="view_dashboard"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             📊 لوحة التحكم
           </button>
@@ -100,6 +131,14 @@
             class="nav-btn"
             data-target="students"
             data-permission="manage_students"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             👥 إدارة المستفيدين
           </button>
@@ -107,6 +146,14 @@
             class="nav-btn"
             data-target="tracks"
             data-permission="manage_tracks"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             🛤️ إدارة المسارات
           </button>
@@ -114,6 +161,14 @@
             class="nav-btn"
             data-target="manage-circles"
             data-permission="manage_circles"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             🔄 إدارة الحلقات
           </button>
@@ -121,6 +176,14 @@
             class="nav-btn"
             data-target="admin-records"
             data-permission="manage_all_records"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             📋 سجل الطلاب الشامل
           </button>
@@ -128,6 +191,14 @@
             class="nav-btn"
             data-target="reports"
             data-permission="view_reports"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             📄 التقارير
           </button>
@@ -135,6 +206,14 @@
             class="nav-btn"
             data-target="settings"
             data-permission="manage_settings"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             ⚙️ إعدادات النظام
           </button>
@@ -142,6 +221,14 @@
             class="nav-btn"
             data-target="logs"
             data-permission="view_audit_logs"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
           >
             🛡️ سجل العمليات
           </button>
