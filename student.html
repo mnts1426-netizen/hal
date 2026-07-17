@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>بوابة الطالب | حلقات الحديث</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body style="background-color: var(--bg-main)">
+    <img
+      src="شعار برنامج حفظ السنة.jpg.jpeg"
+      class="print-watermark"
+      alt="Watermark"
+      style="display: block; opacity: 0.03"
+    />
+
+    <div id="global-loader"><div class="spinner"></div></div>
+
+    <!-- شاشة الدخول الخاصة بالطالب -->
+    <div
+      id="student-login-screen"
+      class="wathbah-login-theme"
+      style="display: none"
+    >
+      <div class="auth-card" style="border-top: 4px solid var(--primary-blue)">
+        <div class="auth-header">
+          <h1 class="brand-title">بوابة الطالب</h1>
+          <p class="brand-subtitle">مرحباً بك في برنامج حفظ السنة</p>
+        </div>
+        <form id="student-login-form">
+          <div class="input-group">
+            <input
+              type="text"
+              id="login-id-number"
+              class="w-input"
+              placeholder="رقم الهوية / الإقامة"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <input
+              type="password"
+              id="login-pin"
+              class="w-input"
+              placeholder="الرقم السري (الافتراضي: 1234)"
+              required
+            />
+          </div>
+          <button type="submit" id="btn-submit" class="w-btn-submit">
+            تسجيل الدخول
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- لوحة تحكم الطالب (Dashboard) -->
+    <div
+      id="student-dashboard"
+      style="
+        display: none;
+        padding: 1rem;
+        max-width: 600px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+      "
+    >
+      <!-- ترويسة الترحيب -->
+      <div
+        style="
+          background: var(--primary-blue);
+          color: white;
+          padding: 1.5rem;
+          border-radius: 10px;
+          margin-bottom: 1.5rem;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+          border-bottom: 4px solid var(--gold-text);
+          position: relative;
+          overflow: hidden;
+        "
+      >
+        <h2
+          style="font-size: 1.4rem; font-weight: 800; margin-bottom: 5px"
+          id="st-name"
+        >
+          أهلاً بك، --
+        </h2>
+        <p style="font-size: 0.9rem; color: #e2e8f0; margin-bottom: 15px">
+          بوابة الإنجاز والمتابعة اليومية
+        </p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <span
+            style="
+              background: rgba(255, 255, 255, 0.15);
+              padding: 5px 10px;
+              border-radius: 5px;
+              font-size: 0.8rem;
+              font-weight: 700;
+            "
+            >📖 <span id="st-track">--</span></span
+          >
+          <span
+            style="
+              background: rgba(255, 255, 255, 0.15);
+              padding: 5px 10px;
+              border-radius: 5px;
+              font-size: 0.8rem;
+              font-weight: 700;
+            "
+            >🕌 <span id="st-circle">--</span></span
+          >
+        </div>
+        <button
+          id="btn-logout"
+          style="
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 0.8rem;
+            cursor: pointer;
+          "
+        >
+          خروج
+        </button>
+      </div>
+
+      <!-- إحصائيات الإنجاز -->
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 1.5rem;
+        "
+      >
+        <div
+          class="stat-card"
+          style="padding: 1rem; border-bottom: 3px solid var(--gold-text)"
+        >
+          <h3 style="font-size: 0.8rem">نسبة الحضور</h3>
+          <p
+            class="stat-value"
+            id="st-attendance-rate"
+            style="font-size: 1.5rem"
+          >
+            0%
+          </p>
+        </div>
+        <div
+          class="stat-card"
+          style="padding: 1rem; border-bottom: 3px solid var(--primary-blue)"
+        >
+          <h3 style="font-size: 0.8rem">إنجاز المنهج</h3>
+          <p class="stat-value" id="st-progress-rate" style="font-size: 1.5rem">
+            0%
+          </p>
+        </div>
+      </div>
+
+      <!-- مقرر اليوم -->
+      <div
+        class="content-card"
+        style="
+          padding: 1.2rem;
+          border-top: none;
+          border-right: 4px solid var(--gold-text);
+        "
+      >
+        <h3
+          style="
+            font-size: 1.1rem;
+            color: var(--primary-blue);
+            font-weight: 800;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          "
+        >
+          📅 مقرر اليوم
+          <span
+            id="st-today-label"
+            style="
+              font-size: 0.8rem;
+              background: var(--primary-light);
+              padding: 2px 8px;
+              border-radius: 10px;
+              color: var(--primary-blue);
+            "
+            >--</span
+          >
+        </h3>
+
+        <div
+          style="
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+          "
+        >
+          <strong
+            style="
+              color: var(--primary-blue);
+              font-size: 0.9rem;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >📖 مقرر الحفظ:</strong
+          >
+          <span
+            id="st-task-mem"
+            style="font-size: 0.85rem; color: #475569; font-weight: 700"
+            >--</span
+          >
+        </div>
+
+        <div
+          style="
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+          "
+        >
+          <strong
+            style="
+              color: var(--primary-blue);
+              font-size: 0.9rem;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >🔄 مقرر التثبيت:</strong
+          >
+          <span
+            id="st-task-cons"
+            style="font-size: 0.85rem; color: #475569; font-weight: 700"
+            >--</span
+          >
+        </div>
+
+        <div
+          style="
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+          "
+        >
+          <strong
+            style="
+              color: var(--primary-blue);
+              font-size: 0.9rem;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >🔁 مقرر المراجعة:</strong
+          >
+          <span
+            id="st-task-rev"
+            style="font-size: 0.85rem; color: #475569; font-weight: 700"
+            >--</span
+          >
+        </div>
+      </div>
+
+      <!-- حالة تسميع اليوم -->
+      <div
+        class="content-card"
+        style="padding: 1.2rem; text-align: center"
+        id="st-today-status-card"
+      >
+        <h3
+          style="
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            margin-bottom: 10px;
+          "
+        >
+          حالة إنجاز اليوم:
+        </h3>
+        <div
+          id="st-today-status"
+          style="font-size: 1rem; font-weight: bold; color: var(--primary-blue)"
+        >
+          جارِ التحميل...
+        </div>
+      </div>
+
+      <!-- تغيير الرقم السري -->
+      <details
+        style="
+          margin-top: 1rem;
+          background: white;
+          padding: 10px;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+        "
+      >
+        <summary
+          style="
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-gray);
+            cursor: pointer;
+            outline: none;
+          "
+        >
+          ⚙️ تغيير الرقم السري
+        </summary>
+        <form
+          id="student-password-form"
+          style="margin-top: 10px; display: flex; gap: 10px"
+        >
+          <input
+            type="password"
+            id="st-new-pin"
+            class="modern-input"
+            placeholder="الرقم السري الجديد"
+            maxlength="4"
+            required
+            style="flex: 1; font-size: 0.85rem; padding: 8px"
+          />
+          <button
+            type="submit"
+            class="btn-submit"
+            style="
+              width: auto;
+              padding: 8px 15px;
+              margin: 0;
+              font-size: 0.85rem;
+            "
+          >
+            تحديث
+          </button>
+        </form>
+      </details>
+
+      <div
+        style="
+          text-align: center;
+          margin-top: 2rem;
+          padding-bottom: 2rem;
+          opacity: 0.7;
+        "
+      >
+        <p
+          style="
+            font-size: 0.75rem;
+            color: var(--primary-blue);
+            font-weight: 700;
+            line-height: 1.5;
+          "
+        >
+          تمت المراجعة والاعتماد من قبل دكاترة بجامعة الملك خالد<br />جمعية
+          الدعوة والإرشاد
+        </p>
+      </div>
+    </div>
+
+    <!-- مكتبات Firebase (نفسها الموجودة في الإدارة) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="firebase.js"></script>
+    <script src="student-app.js"></script>
+  </body>
+</html>
