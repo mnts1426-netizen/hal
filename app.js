@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
       PERMISSIONS.VIEW_DASHBOARD,
       PERMISSIONS.VIEW_REPORTS,
       PERMISSIONS.MANAGE_SETTINGS,
-      PERMISSIONS.MANAGE_STUDENTS,
+      PERMISSIONS.MANAGE_STUDENTS, // تم إضافة صلاحية إدارة الطلاب للمعلم
     ],
   };
 
@@ -337,12 +337,9 @@ document.addEventListener("DOMContentLoaded", () => {
     return nums ? Math.max(...nums.map(Number)) : 0;
   }
 
-  // ==========================================
-  // إعدادات المزامنة السحابية (Firebase Sync Layer)
-  // ==========================================
+  // المزامنة السحابية
   async function initDB() {
     try {
-      // جلب البيانات من السحابة إذا كان المتصفح متصلاً
       const studentsSnap = await dbFirestore.collection("students").get();
       const circlesSnap = await dbFirestore.collection("groups").get();
       const usersSnap = await dbFirestore.collection("users").get();
@@ -360,54 +357,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (loadedUsers[u.role]) loadedUsers[u.role].push(u);
       });
 
-      // إذا كانت السحابة فارغة (أول تشغيل)، قم بزرع بيانات افتراضية
       if (loadedUsers.admin.length === 0) {
         loadedUsers = {
           admin: [{ id: "a1", name: "أ. عبدالله", role: "admin", pin: "0000" }],
-          supervisor: [
-            {
-              id: "sup1",
-              name: "سعد",
-              phone: "0500000000",
-              pin: "2222",
-              role: "supervisor",
-            },
-          ],
-          teacher: [
-            {
-              id: "tech1",
-              name: "أحمد",
-              pin: "1234",
-              circleId: "c1",
-              role: "teacher",
-            },
-          ],
+          supervisor: [],
+          teacher: [],
         };
-        loadedCircles = [
-          {
-            id: "c1",
-            name: "حلقة الإمام البخاري",
-            teacherId: "tech1",
-            trackId: "t1",
-          },
-        ];
-        loadedStudents = [
-          {
-            id: "s1",
-            name: "عبدالرحمن محمد",
-            level: "المتوسطة",
-            trackId: "t1",
-            circleId: "c1",
-            progress: { mem: [], cons: [], rev: [] },
-            manualProgress: { mem: "", cons: "", rev: "" },
-            detailedProgress: { mem: [], cons: [], rev: [] },
-          },
-        ];
+        loadedCircles = [];
+        loadedStudents = [];
       }
 
       window.db = {
-        tracks: tracksDefinition, // مغروسة محلياً
-        scheduleData: scheduleData, // مغروسة محلياً
+        tracks: tracksDefinition,
+        scheduleData: scheduleData,
         circles: loadedCircles,
         students: loadedStudents,
         users: loadedUsers,
@@ -415,19 +377,10 @@ document.addEventListener("DOMContentLoaded", () => {
         auditLogs: loadedLogs,
       };
 
-      // حفظ نسخة محلية احتياطية (تعمل ككاش)
       localStorage.setItem("wathbah_db", JSON.stringify(window.db));
-
-      // التخزين السحابي الأولي إذا كان النظام جديداً
-      if (loadedUsers.admin.length === 0) {
-        saveDB();
-      }
+      if (loadedUsers.admin.length === 0) saveDB();
     } catch (e) {
-      console.warn(
-        "تنبيه: لا يوجد اتصال أو أن Firebase غير مهيأ بعد. سيتم استخدام النسخة المحلية.",
-        e,
-      );
-      // وضع (Offline First) في حال انقطاع النت أو عدم الربط
+      console.warn("استخدام النسخة المحلية للبيانات بسبب انقطاع الاتصال.", e);
       const stored = localStorage.getItem("wathbah_db");
       if (stored) {
         window.db = JSON.parse(stored);
@@ -437,14 +390,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.db = {
           tracks: tracksDefinition,
           scheduleData: scheduleData,
-          circles: [
-            {
-              id: "c1",
-              name: "حلقة الإمام البخاري",
-              teacherId: "tech1",
-              trackId: "t1",
-            },
-          ],
+          circles: [],
           students: [],
           users: {
             admin: [
@@ -460,12 +406,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // دالة الحفظ السحرية (تزامن محلي + سحابي متوافق مع Firebase)
   async function saveDB() {
-    // الحفظ المحلي السريع لعدم تعليق النظام
     localStorage.setItem("wathbah_db", JSON.stringify(window.db));
-
-    // المزامنة بالخلفية مع Firebase
     try {
       if (typeof dbFirestore !== "undefined") {
         window.db.students.forEach((s) =>
@@ -491,7 +433,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
       }
     } catch (err) {
-      console.warn("الإنترنت مقطوع، سيقوم Firebase برفعها فور عودة الاتصال.");
+      console.warn("سيتم الرفع عند عودة الإنترنت.");
     }
   }
 
@@ -543,11 +485,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sessionStr) {
       try {
         const session = JSON.parse(sessionStr);
-        if (Date.now() - session.loginTime < 5 * 60 * 60 * 1000) {
+        if (Date.now() - session.loginTime < 5 * 60 * 60 * 1000)
           return session.user;
-        } else {
-          localStorage.removeItem("wathbah_session");
-        }
+        else localStorage.removeItem("wathbah_session");
       } catch (e) {}
     }
     return null;
@@ -559,7 +499,6 @@ document.addEventListener("DOMContentLoaded", () => {
       "wathbah_session",
       JSON.stringify({ user: currentUser, loginTime: Date.now() }),
     );
-
     loginScreen.style.display = "none";
     mainApp.style.display = "flex";
     document.getElementById("current-user-name").textContent = currentUser.name;
@@ -573,47 +512,34 @@ document.addEventListener("DOMContentLoaded", () => {
         : "none";
     });
 
-    const addSupervisorCard = document.getElementById("add-supervisor-card");
-    if (addSupervisorCard) {
-      addSupervisorCard.style.display = hasPermission(
-        currentUser.role,
-        PERMISSIONS.MANAGE_SUPERVISORS,
-      )
-        ? "block"
-        : "none";
-    }
-
-    const addTeacherCard = document.getElementById("add-teacher-card");
-    if (addTeacherCard) {
-      addTeacherCard.style.display = hasPermission(
+    if (document.getElementById("add-supervisor-card"))
+      document.getElementById("add-supervisor-card").style.display =
+        hasPermission(currentUser.role, PERMISSIONS.MANAGE_SUPERVISORS)
+          ? "block"
+          : "none";
+    if (document.getElementById("add-teacher-card"))
+      document.getElementById("add-teacher-card").style.display = hasPermission(
         currentUser.role,
         PERMISSIONS.MANAGE_TEACHERS,
       )
         ? "block"
         : "none";
-    }
-
-    const reportFilterGroup = document.getElementById("report-filter-group");
-    if (reportFilterGroup)
-      reportFilterGroup.style.display =
+    if (document.getElementById("report-filter-group"))
+      document.getElementById("report-filter-group").style.display =
         currentUser.role === "teacher" ? "none" : "block";
-
-    const teachersSec = document.getElementById("teachers-management-section");
-    if (teachersSec)
-      teachersSec.style.display = hasPermission(
-        currentUser.role,
-        PERMISSIONS.MANAGE_TEACHERS,
-      )
-        ? "block"
-        : "none";
+    if (document.getElementById("teachers-management-section"))
+      document.getElementById("teachers-management-section").style.display =
+        hasPermission(currentUser.role, PERMISSIONS.MANAGE_TEACHERS)
+          ? "block"
+          : "none";
 
     const firstBtn = document.querySelector('.nav-btn[style*="display: flex"]');
     if (firstBtn) firstBtn.click();
 
     const todayIso = new Date().toISOString().split("T")[0];
     document.getElementById("report-date-input").value = todayIso;
-    const adminDateInput = document.getElementById("admin-record-date");
-    if (adminDateInput) adminDateInput.value = todayIso;
+    if (document.getElementById("admin-record-date"))
+      document.getElementById("admin-record-date").value = todayIso;
 
     refreshAllViews();
   }
@@ -626,11 +552,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         loader.style.display = "none";
         const sessionUser = checkSession();
-        if (sessionUser) {
-          doLogin(sessionUser);
-        } else {
-          loginScreen.style.display = "flex";
-        }
+        if (sessionUser) doLogin(sessionUser);
+        else loginScreen.style.display = "flex";
       }, 500);
     }
   }, 600);
@@ -668,12 +591,8 @@ document.addEventListener("DOMContentLoaded", () => {
         userSelect.options[userSelect.selectedIndex].dataset.userObj,
       );
       const enteredPin = loginPasswordInput.value;
-
-      if (user.pin && user.pin !== enteredPin) {
-        alert("الرقم السري غير صحيح!");
-        return;
-      }
-
+      if (user.pin && user.pin !== enteredPin)
+        return alert("الرقم السري غير صحيح!");
       submitBtn.innerHTML = "جاري التحقق...";
       submitBtn.disabled = true;
       setTimeout(() => {
@@ -722,7 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDynamicDropdowns();
     updateDashboardStats();
     updateSupportInfo();
-    if (currentUser.role === "teacher") renderDailyTracking("");
+    if (currentUser && currentUser.role === "teacher") renderDailyTracking("");
     else renderAdminRecords();
     generateReport();
     updateTopBanner();
@@ -730,39 +649,35 @@ document.addEventListener("DOMContentLoaded", () => {
     renderLogs();
   }
 
-  const adminStudentSearch = document.getElementById("admin-student-search");
-  if (adminStudentSearch)
-    adminStudentSearch.addEventListener("input", () => renderAdminRecords());
-
-  const adminTeacherSearch = document.getElementById("admin-teacher-search");
-  if (adminTeacherSearch)
-    adminTeacherSearch.addEventListener("input", () => renderTeachers());
+  if (document.getElementById("admin-student-search"))
+    document
+      .getElementById("admin-student-search")
+      .addEventListener("input", () => renderAdminRecords());
+  if (document.getElementById("admin-teacher-search"))
+    document
+      .getElementById("admin-teacher-search")
+      .addEventListener("input", () => renderTeachers());
 
   function updateSupportInfo() {
     const supportDiv = document.getElementById("dynamic-support-info");
     if (!supportDiv) return;
-
     if (currentUser.role === "teacher") {
       supportDiv.innerHTML = `<div style="background: var(--bg-main); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); border-right: 3px solid var(--primary-blue);"><strong>🏢 التواصل مع الإدارة:</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">يرجى التواصل مع المشرف المباشر لحلقتك أو إدارة المجمع لأي استفسارات إدارية وأكاديمية.</span></div>`;
     } else if (currentUser.role === "supervisor") {
       supportDiv.innerHTML = `<div style="background: var(--bg-main); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); border-right: 3px solid var(--primary-blue);"><strong>👑 التواصل مع المدير:</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">يرجى التواصل مع مدير المجمع لاعتماد القرارات أو رفع الملاحظات الشاملة.</span></div>`;
     } else if (currentUser.role === "admin") {
-      supportDiv.innerHTML = `
-        <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid #e2e8f0; border-right: 3px solid var(--gold-text);">
-          <strong style="color: var(--primary-blue);">⚙️ الدعم الفني للنظام (مطور النظام):</strong> <br />
-          <span style="color: var(--text-gray); font-size:0.85rem;">لأي تعديلات أو دعم فني مخصص للنظام، يرجى التواصل مباشرة.</span><br/>
-          <a href="https://wa.me/966537466925" target="_blank" style="display:inline-block; margin-top:8px; background: #25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration: none; font-weight:bold; font-size:0.85rem;">💬 تواصل عبر واتساب: 966537466925+</a>
-        </div>`;
+      supportDiv.innerHTML = `<div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid #e2e8f0; border-right: 3px solid var(--gold-text);"><strong style="color: var(--primary-blue);">⚙️ الدعم الفني للنظام (مطور النظام):</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">لأي تعديلات أو دعم فني مخصص للنظام، يرجى التواصل مباشرة.</span><br/><a href="https://wa.me/966537466925" target="_blank" style="display:inline-block; margin-top:8px; background: #25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration: none; font-weight:bold; font-size:0.85rem;">💬 تواصل عبر واتساب: 966537466925+</a></div>`;
     }
   }
 
-  const supportForm = document.getElementById("support-message-form");
-  if (supportForm) {
-    supportForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      alert("تم إرسال رسالتك أو ملاحظتك بنجاح! سيتم مراجعتها في أقرب وقت.");
-      supportForm.reset();
-    });
+  if (document.getElementById("support-message-form")) {
+    document
+      .getElementById("support-message-form")
+      .addEventListener("submit", (e) => {
+        e.preventDefault();
+        alert("تم إرسال رسالتك أو ملاحظتك بنجاح! سيتم مراجعتها في أقرب وقت.");
+        e.target.reset();
+      });
   }
 
   function updateTopBanner() {
@@ -770,16 +685,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!banner) return;
     const currentDay = getCurrentProgramDay();
     const trackId = "t1";
-    const targetMem = getTaskText(trackId, "mem", currentDay);
-    const targetCons = getTaskText(trackId, "cons", currentDay);
-    const targetRev = getTaskText(trackId, "rev", currentDay);
-
     banner.innerHTML = `
       <div class="banner-header"><span class="daily-target-icon">📅</span> <strong>مقرر اليوم: ${getDateLabel(currentDay)}</strong></div>
       <div class="banner-details" style="margin-top:5px;">
-        <div><strong>📖 حفظ:</strong> ${targetMem}</div>
-        <div><strong>🔄 تثبيت:</strong> ${targetCons}</div>
-        <div><strong>🔁 مراجعة:</strong> ${targetRev}</div>
+        <div><strong>📖 حفظ:</strong> ${getTaskText(trackId, "mem", currentDay)}</div>
+        <div><strong>🔄 تثبيت:</strong> ${getTaskText(trackId, "cons", currentDay)}</div>
+        <div><strong>🔁 مراجعة:</strong> ${getTaskText(trackId, "rev", currentDay)}</div>
       </div>
     `;
   }
@@ -793,7 +704,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ? window.db.students.filter((s) => s.circleId === currentUser.circleId)
       : window.db.students;
     const circlesCount = window.db.circles.length;
-
     const today = new Date().toISOString().split("T")[0];
     const todaysRecords = window.db.dailyRecords.filter(
       (r) => r.date === today && students.find((s) => s.id === r.studentId),
@@ -806,7 +716,6 @@ document.addEventListener("DOMContentLoaded", () => {
       students.length > 0
         ? Math.round((attendanceCount / students.length) * 100)
         : 0;
-
     const targetDay = getCurrentProgramDay();
     const totalProgress = students.reduce(
       (acc, s) =>
@@ -823,29 +732,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (avgProgress > 100) avgProgress = 100;
 
     if (isTeacher) {
-      dashGrid.innerHTML = `
-        <div class="stat-card"><h3>طلاب حلقتي</h3><p class="stat-value">${students.length}</p></div>
-        <div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div>
-        <div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div>
-      `;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>طلاب حلقتي</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div>`;
     } else {
-      const priCount = students.filter((s) => s.level === "الابتدائية").length;
-      const midCount = students.filter((s) => s.level === "المتوسطة").length;
-      const highCount = students.filter((s) => s.level === "الثانوية").length;
-      const uniCount = students.filter((s) => s.level === "الجامعة").length;
-      const upCount = students.filter((s) => s.level === "أعلى من ذلك").length;
-
-      dashGrid.innerHTML = `
-        <div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div>
-        <div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div>
-        <div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div>
-        <div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div>
-        <div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${priCount}</p></div>
-        <div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${midCount}</p></div>
-        <div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${highCount}</p></div>
-        <div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${uniCount}</p></div>
-        <div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${upCount}</p></div>
-      `;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>`;
     }
   }
 
@@ -863,6 +752,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (newCircleTrack) {
       newCircleTrack.innerHTML =
         '<option value="" disabled selected>اختر المسار المخصص للحلقة...</option>';
+      // إضافة خيار حلقة عامة
+      newCircleTrack.innerHTML +=
+        '<option value="all" style="font-weight:bold; color:var(--primary-blue);">🌍 جميع المسارات (حلقة عامة)</option>';
       window.db.tracks.forEach(
         (t) =>
           (newCircleTrack.innerHTML += `<option value="${t.id}">${t.name}</option>`),
@@ -886,7 +778,6 @@ document.addEventListener("DOMContentLoaded", () => {
           (assignCircleSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`),
       );
     }
-
     const reportFilter = document.getElementById("report-circle-filter");
     if (reportFilter) {
       reportFilter.innerHTML = '<option value="all">كافة الحلقات</option>';
@@ -894,6 +785,32 @@ document.addEventListener("DOMContentLoaded", () => {
         reportFilter.innerHTML += `<option value="${c.id}">${c.name}</option>`;
       });
     }
+  }
+
+  // فلترة الحلقات بذكاء عند اختيار المسار في شاشة إضافة طالب
+  const stuTrackSelect = document.getElementById("stu-track");
+  const stuCircleSelect = document.getElementById("stu-circle");
+  if (stuTrackSelect && stuCircleSelect) {
+    stuTrackSelect.addEventListener("change", (e) => {
+      const selectedTrack = e.target.value;
+      stuCircleSelect.innerHTML =
+        '<option value="" disabled selected>اختر الحلقة المناسبة للطالب...</option>';
+
+      const matchingCircles = window.db.circles.filter(
+        (c) => c.trackId === selectedTrack || c.trackId === "all",
+      );
+
+      if (matchingCircles.length === 0) {
+        stuCircleSelect.innerHTML +=
+          '<option value="" disabled>لا توجد حلقات لهذا المسار حالياً</option>';
+      } else {
+        matchingCircles.forEach((c) => {
+          let typeLabel =
+            c.trackId === "all" ? " (حلقة عامة)" : " (مخصصة للمسار)";
+          stuCircleSelect.innerHTML += `<option value="${c.id}">${c.name}${typeLabel}</option>`;
+        });
+      }
+    });
   }
 
   const addTrackForm = document.getElementById("add-track-form");
@@ -928,35 +845,33 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const sName = document.getElementById("stu-name").value;
       const sTrackId = document.getElementById("stu-track").value;
-
-      const matchingCircle = window.db.circles.find(
-        (c) => c.trackId === sTrackId,
-      );
-      const autoCircleId = matchingCircle ? matchingCircle.id : "";
+      const selectedCircleId = document.getElementById("stu-circle").value;
 
       window.db.students.push({
         id: "s" + Date.now(),
         name: sName,
+        idNumber: document.getElementById("stu-id-number").value,
+        phone: document.getElementById("stu-phone").value,
+        pin: document.getElementById("stu-pin").value,
         level: document.getElementById("stu-level").value,
         trackId: sTrackId,
-        circleId: autoCircleId,
+        circleId: selectedCircleId,
         progress: { mem: [], cons: [], rev: [] },
         manualProgress: { mem: "", cons: "", rev: "" },
         detailedProgress: { mem: [], cons: [], rev: [] },
       });
 
       e.target.reset();
+      stuCircleSelect.innerHTML =
+        '<option value="" disabled selected>اختر المسار أولاً لتظهر الحلقات...</option>';
       saveDB();
       refreshAllViews();
-      let msg = "تم تسجيل الطالب بنجاح!";
-      if (autoCircleId)
-        msg += `\n وتم ضمه تلقائياً لـ (${matchingCircle.name}).`;
-      else msg += `\n (ملاحظة: لا توجد حلقة مرتبطة بهذا المسار حالياً).`;
-      alert(msg);
-      addLog(
-        `تسجيل طالب وربطه تلقائياً: ${sName}`,
-        matchingCircle ? matchingCircle.name : "غير موزع",
-      );
+
+      const cName =
+        window.db.circles.find((c) => c.id === selectedCircleId)?.name ||
+        "غير موزع";
+      alert(`تم تسجيل الطالب بنجاح وإضافته إلى: ${cName}`);
+      addLog(`تسجيل طالب وتوزيعه: ${sName}`, cName);
     });
   }
 
@@ -999,22 +914,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const teacher = window.db.users.teacher.find((t) => t.id === teacherId);
       if (teacher) teacher.circleId = circleId;
 
-      let autoAssignedCount = 0;
-      window.db.students.forEach((s) => {
-        if (!s.circleId && s.trackId === trackId) {
-          s.circleId = circleId;
-          autoAssignedCount++;
-        }
-      });
-
       e.target.reset();
       saveDB();
       refreshAllViews();
-      let msg = "تم تأسيس الحلقة بنجاح!";
-      if (autoAssignedCount > 0)
-        msg += `\n وتم سحب وضم (${autoAssignedCount}) طالب تلقائياً من المسار المطابق.`;
-      alert(msg);
-      addLog(`تأسيس الحلقة بمسار محدد`, circleName);
+      alert("تم تأسيس الحلقة بنجاح!");
+      addLog(`تأسيس حلقة جديدة`, circleName);
     });
   }
 
@@ -1024,20 +928,20 @@ document.addEventListener("DOMContentLoaded", () => {
       const circleId = this.value;
       const listDiv = document.getElementById("unassigned-students-list");
       listDiv.innerHTML = "";
-
       const selectedCircle = window.db.circles.find((c) => c.id === circleId);
       if (!selectedCircle) return;
 
       const matchingStudents = window.db.students.filter(
-        (s) => s.trackId === selectedCircle.trackId,
+        (s) =>
+          s.trackId === selectedCircle.trackId ||
+          selectedCircle.trackId === "all",
       );
 
       if (matchingStudents.length === 0) {
         listDiv.innerHTML =
-          '<p style="color:gray; font-size:0.85rem; text-align:center;">لا يوجد طلاب مسجلين في نفس مسار هذه الحلقة.</p>';
+          '<p style="color:gray; font-size:0.85rem; text-align:center;">لا يوجد طلاب مسجلين يناسبون هذه الحلقة.</p>';
         return;
       }
-
       matchingStudents.forEach((s) => {
         const isChecked = s.circleId === circleId ? "checked" : "";
         listDiv.innerHTML += `
@@ -1078,16 +982,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!tbody) return;
     tbody.innerHTML = "";
     window.db.circles.forEach((c, i) => {
-      const track = window.db.tracks.find((t) => t.id === c.trackId) || {
-        name: "غير محدد",
-      };
+      let trackName = "جميع المسارات (عامة)";
+      if (c.trackId !== "all") {
+        const track = window.db.tracks.find((t) => t.id === c.trackId);
+        trackName = track ? track.name : "غير محدد";
+      }
       const teacher = window.db.users.teacher.find(
         (t) => t.id === c.teacherId,
       ) || { name: "غير معين" };
       const studentCount = window.db.students.filter(
         (s) => s.circleId === c.id,
       ).length;
-      tbody.innerHTML += `<tr><td>${i + 1}</td><td style="font-weight:700;">${c.name}</td><td><span class="badge" style="background:#f1f5f9; color:var(--primary-blue);">${track.name}</span></td><td>${teacher.name}</td><td style="color:var(--primary-blue); font-weight:bold;">${studentCount} طلاب</td>
+      tbody.innerHTML += `<tr><td>${i + 1}</td><td style="font-weight:700;">${c.name}</td><td><span class="badge" style="background:#f1f5f9; color:var(--primary-blue);">${trackName}</span></td><td>${teacher.name}</td><td style="color:var(--primary-blue); font-weight:bold;">${studentCount} طلاب</td>
       <td><button class="btn-action" onclick="openEditModal('circle', '${c.id}')">تعديل الحلقة</button></td></tr>`;
     });
   }
@@ -1099,24 +1005,38 @@ document.addEventListener("DOMContentLoaded", () => {
     window.db.tracks.forEach(
       (t, i) =>
         (tbody.innerHTML += `<tr><td>${i + 1}</td><td style="font-weight:700;">${t.name}</td>
-    <td>
-      <button class="btn-action" onclick="openEditModal('track', '${t.id}')">تعديل الاسم</button>
-      <button class="btn-action" style="background:var(--primary-light); color:var(--primary-blue); margin-right:5px;" onclick="openScheduleModal('${t.id}')">تعديل المقررات</button>
-    </td></tr>`),
+    <td><button class="btn-action" onclick="openEditModal('track', '${t.id}')">تعديل الاسم</button><button class="btn-action" style="background:var(--primary-light); color:var(--primary-blue); margin-right:5px;" onclick="openScheduleModal('${t.id}')">تعديل المقررات</button></td></tr>`),
     );
   }
+
+  // دالة الحذف العامة
+  window.deleteStudent = function (studentId) {
+    if (
+      confirm(
+        "⚠️ تحذير: هل أنت متأكد من رغبتك في حذف هذا الطالب نهائياً من النظام؟ لا يمكن التراجع عن هذا الإجراء.",
+      )
+    ) {
+      const student = window.db.students.find((s) => s.id === studentId);
+      window.db.students = window.db.students.filter((s) => s.id !== studentId);
+      // تنظيف سجلاته اليومية أيضاً
+      window.db.dailyRecords = window.db.dailyRecords.filter(
+        (r) => r.studentId !== studentId,
+      );
+
+      saveDB();
+      refreshAllViews();
+      alert("تم حذف الطالب بنجاح.");
+      addLog(`حذف الطالب: ${student ? student.name : "غير معروف"}`, "عام");
+    }
+  };
 
   function renderStudents() {
     const tbody = document.getElementById("students-list-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
+    // تم إزالة قيد المعلم ليتمكن الجميع من رؤية كامل الطلاب هنا
     let displayStudents = window.db.students;
-    if (currentUser.role === "teacher") {
-      displayStudents = displayStudents.filter(
-        (s) => s.circleId === currentUser.circleId,
-      );
-    }
 
     displayStudents.forEach((s) => {
       const track = window.db.tracks.find((t) => t.id === s.trackId) || {
@@ -1126,7 +1046,10 @@ document.addEventListener("DOMContentLoaded", () => {
         name: "غير موزع لحلقة",
       };
       tbody.innerHTML += `<tr><td style="font-weight:700;">${s.name}</td><td>${s.level}</td><td><span style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">${track.name}</span></td><td style="color:${circle.name === "غير موزع لحلقة" ? "var(--danger-btn)" : "inherit"}">${circle.name}</td>
-      <td><button class="btn-action" onclick="openEditModal('student', '${s.id}')">تعديل بياناته</button></td></tr>`;
+      <td>
+        <button class="btn-action" onclick="openEditModal('student', '${s.id}')">تعديل</button>
+        <button class="btn-action" style="background:var(--danger-btn); color:white; border-color:var(--danger-btn); margin-right:5px;" onclick="deleteStudent('${s.id}')">حذف</button>
+      </td></tr>`;
     });
   }
 
@@ -1134,16 +1057,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = document.getElementById("teachers-list-body");
     if (!tbody) return;
     tbody.innerHTML = "";
-
     const searchVal =
       document.getElementById("admin-teacher-search")?.value.toLowerCase() ||
       "";
     let filteredTeachers = window.db.users.teacher;
-    if (searchVal) {
+    if (searchVal)
       filteredTeachers = filteredTeachers.filter((t) =>
         t.name.toLowerCase().includes(searchVal),
       );
-    }
 
     filteredTeachers.forEach((t) => {
       const circle = window.db.circles.find((c) => c.id === t.circleId) || {
@@ -1164,18 +1085,47 @@ document.addEventListener("DOMContentLoaded", () => {
     if (type === "student") {
       const s = window.db.students.find((x) => x.id === id);
       document.getElementById("edit-modal-title").textContent =
-        "تعديل بيانات الطالب الأساسية";
+        "تعديل بيانات الطالب";
       let trackOpts = "";
       window.db.tracks.forEach(
         (t) =>
           (trackOpts += `<option value="${t.id}" ${s.trackId === t.id ? "selected" : ""}>${t.name}</option>`),
       );
 
+      let circleOpts = "<option value=''>غير موزع لحلقة</option>";
+      const matchingCircles = window.db.circles.filter(
+        (c) => c.trackId === s.trackId || c.trackId === "all",
+      );
+      matchingCircles.forEach((c) => {
+        circleOpts += `<option value="${c.id}" ${s.circleId === c.id ? "selected" : ""}>${c.name}</option>`;
+      });
+
       fields.innerHTML = `
         <div class="input-group"><label>اسم الطالب</label><input type="text" id="edit-stu-name" class="modern-input" value="${s.name}" required></div>
-        <div class="input-group"><label>المسار (تغيير المسار سينقله لحلقة أخرى تلقائياً)</label><select id="edit-stu-track" class="modern-input">${trackOpts}</select></div>
-        <p style="font-size:0.8rem; color:var(--text-gray); margin-top:10px;">ملاحظة: الحلقة تتحدد وتتحدث تلقائياً بناءً على المسار المختار للطالب.</p>
+        <div style="display:flex; gap:10px;">
+          <div class="input-group" style="flex:1"><label>رقم الهوية</label><input type="text" id="edit-stu-id" class="modern-input" value="${s.idNumber || ""}" required></div>
+          <div class="input-group" style="flex:1"><label>رقم الجوال</label><input type="tel" id="edit-stu-phone" class="modern-input" value="${s.phone || ""}" required></div>
+        </div>
+        <div class="input-group"><label>الرقم السري</label><input type="password" id="edit-stu-pin" class="modern-input" value="${s.pin || "1234"}" maxlength="4" required></div>
+        <div class="input-group"><label>المسار</label><select id="edit-stu-track" class="modern-input">${trackOpts}</select></div>
+        <div class="input-group"><label>الحلقة</label><select id="edit-stu-circle" class="modern-input">${circleOpts}</select></div>
       `;
+
+      // تفاعل اختيار المسار داخل نافذة التعديل
+      setTimeout(() => {
+        const eTrack = document.getElementById("edit-stu-track");
+        const eCircle = document.getElementById("edit-stu-circle");
+        eTrack.addEventListener("change", (e) => {
+          const tId = e.target.value;
+          eCircle.innerHTML = "<option value=''>غير موزع لحلقة</option>";
+          const mCircles = window.db.circles.filter(
+            (c) => c.trackId === tId || c.trackId === "all",
+          );
+          mCircles.forEach((c) => {
+            eCircle.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+          });
+        });
+      }, 100);
     } else if (type === "teacher") {
       const t = window.db.users.teacher.find((x) => x.id === id);
       document.getElementById("edit-modal-title").textContent =
@@ -1204,7 +1154,8 @@ document.addEventListener("DOMContentLoaded", () => {
         (t) =>
           (teacherOpts += `<option value="${t.id}" ${c.teacherId === t.id ? "selected" : ""}>${t.name}</option>`),
       );
-      let trackOpts = "";
+      let trackOpts =
+        "<option value='all' style='font-weight:bold; color:var(--primary-blue);'>🌍 جميع المسارات (حلقة عامة)</option>";
       window.db.tracks.forEach(
         (t) =>
           (trackOpts += `<option value="${t.id}" ${c.trackId === t.id ? "selected" : ""}>${t.name}</option>`),
@@ -1228,16 +1179,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const s = window.db.students.find((x) => x.id === editingContext.id);
       if (s) {
         s.name = document.getElementById("edit-stu-name").value;
-        const newTrackId = document.getElementById("edit-stu-track").value;
-        s.trackId = newTrackId;
-        const matchingCircle = window.db.circles.find(
-          (c) => c.trackId === newTrackId,
-        );
-        s.circleId = matchingCircle ? matchingCircle.id : "";
-        addLog(
-          `تعديل طالب وربطه التلقائي: ${s.name}`,
-          matchingCircle ? matchingCircle.name : "غير موزع",
-        );
+        s.idNumber = document.getElementById("edit-stu-id").value;
+        s.phone = document.getElementById("edit-stu-phone").value;
+        s.pin = document.getElementById("edit-stu-pin").value;
+        s.trackId = document.getElementById("edit-stu-track").value;
+        s.circleId = document.getElementById("edit-stu-circle").value;
+        addLog(`تعديل بيانات الطالب: ${s.name}`, "عام");
       }
     } else if (editingContext.type === "teacher") {
       const t = window.db.users.teacher.find((x) => x.id === editingContext.id);
@@ -1247,7 +1194,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const newCircleId = document.getElementById(
           "edit-teacher-circle",
         ).value;
-
         if (t.circleId !== newCircleId) {
           if (t.circleId) {
             const oldC = window.db.circles.find((c) => c.id === t.circleId);
@@ -1307,10 +1253,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const track = window.db.tracks.find((t) => t.id === trackId);
     document.getElementById("schedule-modal-title").textContent =
       `تعديل مقررات: ${track.name}`;
-
     const tbody = document.getElementById("schedule-modal-tbody");
     tbody.innerHTML = "";
-
     const sched = window.db.scheduleData[trackId] || [];
     sched.forEach((item) => {
       tbody.innerHTML += `
@@ -1349,9 +1293,10 @@ document.addEventListener("DOMContentLoaded", () => {
       alert("تم تحديث المقررات! وستظهر للمعلمين فوراً.");
     });
 
-  const adminDateInput = document.getElementById("admin-record-date");
-  if (adminDateInput)
-    adminDateInput.addEventListener("change", renderAdminRecords);
+  if (document.getElementById("admin-record-date"))
+    document
+      .getElementById("admin-record-date")
+      .addEventListener("change", renderAdminRecords);
 
   function renderAdminRecords() {
     const tbody = document.getElementById("admin-records-body");
@@ -1362,16 +1307,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedDate =
       document.getElementById("admin-record-date").value ||
       new Date().toISOString().split("T")[0];
-
     const searchVal =
       document.getElementById("admin-student-search")?.value.toLowerCase() ||
       "";
     let filteredStudents = window.db.students;
-    if (searchVal) {
+    if (searchVal)
       filteredStudents = filteredStudents.filter((s) =>
         s.name.toLowerCase().includes(searchVal),
       );
-    }
 
     filteredStudents.forEach((student) => {
       const circle = window.db.circles.find(
@@ -1381,7 +1324,6 @@ document.addEventListener("DOMContentLoaded", () => {
         name: "غير محدد",
         totalDays: 23,
       };
-
       const record = window.db.dailyRecords.find(
         (r) => r.studentId === student.id && r.date === selectedDate,
       );
@@ -1420,7 +1362,10 @@ document.addEventListener("DOMContentLoaded", () => {
           <td style="color:${attendancePercent >= 80 ? "#166534" : "#991b1b"}; font-weight:bold;" dir="ltr">${attendancePercent}%</td>
           <td style="color:var(--primary-blue); font-weight:bold;" dir="ltr">${progressPercent}%</td>
           <td>${selectHtml}</td>
-          <td><button class="btn-action" onclick="openEditModal('student', '${student.id}')">تعديل أساسي</button></td>
+          <td>
+            <button class="btn-action" onclick="openEditModal('student', '${student.id}')">تعديل</button>
+            <button class="btn-action" style="background:var(--danger-btn); color:white; border-color:var(--danger-btn); margin-right:5px;" onclick="deleteStudent('${student.id}')">حذف</button>
+          </td>
         </tr>
       `;
     });
@@ -1433,10 +1378,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let existingRecordIndex = window.db.dailyRecords.findIndex(
       (r) => r.studentId === studentId && r.date === selectedDate,
     );
-
-    if (existingRecordIndex > -1) {
+    if (existingRecordIndex > -1)
       window.db.dailyRecords[existingRecordIndex].attendance = status;
-    } else {
+    else {
       window.db.dailyRecords.push({
         studentId,
         date: selectedDate,
@@ -1446,14 +1390,12 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       saveDB();
     }
-
     const student = window.db.students.find((s) => s.id === studentId);
     const circle = window.db.circles.find((c) => c.id === student?.circleId);
     addLog(
       `تعديل حضور الطالب (${student ? student.name : ""}) ليوم ${selectedDate}`,
       circle ? circle.name : "",
     );
-
     updateDashboardStats();
     generateReport();
     renderAdminRecords();
@@ -1471,22 +1413,19 @@ document.addEventListener("DOMContentLoaded", () => {
       `تقرير الإنجاز والمتابعة (يوم: ${dateInput})`;
 
     let studentsToReport = window.db.students;
-
-    if (currentUser.role === "teacher") {
+    if (currentUser.role === "teacher")
       studentsToReport = studentsToReport.filter(
         (s) => s.circleId === currentUser.circleId,
       );
-    } else {
+    else {
       const filterVal = document.getElementById("report-circle-filter")
         ? document.getElementById("report-circle-filter").value
         : "all";
-      if (filterVal && filterVal !== "all") {
+      if (filterVal && filterVal !== "all")
         studentsToReport = studentsToReport.filter(
           (s) => s.circleId === filterVal,
         );
-      }
     }
-
     const dayRecords = window.db.dailyRecords.filter(
       (r) => r.date === dateInput,
     );
@@ -1496,7 +1435,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const circle = window.db.circles.find(
         (c) => c.id === student.circleId,
       ) || { name: "" };
-
       let attText = "غير مسجل";
       let attColor = "var(--text-gray)";
       if (record) {
@@ -1511,7 +1449,6 @@ document.addEventListener("DOMContentLoaded", () => {
           attColor = "#991b1b";
         }
       }
-
       const manualStr = student.manualProgress
         ? ` (ح:${student.manualProgress.mem || 0}, ث:${student.manualProgress.cons || 0}, م:${student.manualProgress.rev || 0})`
         : "";
@@ -1519,22 +1456,16 @@ document.addEventListener("DOMContentLoaded", () => {
         record?.sessionTime && record.sessionTime !== "غير محدد"
           ? ` | وقت: ${record.sessionTime}`
           : "";
-
       const tasksCompleted = record
         ? `أيام المنهج: ${student.progress.mem.length}/${student.progress.cons.length}/${student.progress.rev.length}${manualStr}${timeStr}`
         : "لا يوجد إنجاز جديد";
       const notesStr = record?.notes || "-";
-
       tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td>${notesStr}</td></tr>`;
     });
   }
 
-  // ==========================================
-  // المتابعة اليومية المرنة (المعلم)
-  // ==========================================
   const searchInput = document.getElementById("student-search-input");
   const trackingContainer = document.getElementById("tracking-cards-container");
-
   const globalToggleBtn = document.getElementById("global-toggle-btn");
   if (globalToggleBtn) {
     globalToggleBtn.addEventListener("click", () => {
@@ -1542,7 +1473,6 @@ document.addEventListener("DOMContentLoaded", () => {
       renderDailyTracking(searchInput ? searchInput.value.toLowerCase() : "");
     });
   }
-
   if (searchInput)
     searchInput.addEventListener("input", (e) => {
       renderDailyTracking(e.target.value.toLowerCase());
@@ -1562,14 +1492,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (c.checked && parseInt(c.value) > max) max = parseInt(c.value);
       });
       manualInput.value = max > 0 ? max : "";
-
       quickChecks.forEach((chk) => {
         const text = getTaskText(student.trackId, type, chk.value);
         const target = extractMaxNum(text);
         chk.checked = target > 0 && max >= target;
       });
     };
-
     const updateChecksFromManual = () => {
       let val = parseInt(manualInput.value);
       if (isNaN(val) || val <= 0) {
@@ -1586,7 +1514,6 @@ document.addEventListener("DOMContentLoaded", () => {
         chk.checked = target > 0 && val >= target;
       });
     };
-
     const updateFromQuickChecks = () => {
       let maxTarget = 0;
       quickChecks.forEach((c) => {
@@ -1601,7 +1528,6 @@ document.addEventListener("DOMContentLoaded", () => {
         c.checked = parseInt(c.value) <= maxTarget;
       });
     };
-
     manualInput.addEventListener("input", updateChecksFromManual);
     detChecks.forEach((c) =>
       c.addEventListener("change", updateManualFromChecks),
@@ -1615,7 +1541,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!trackingContainer) return;
     trackingContainer.innerHTML = "";
     let filteredStudents = window.db.students;
-
     if (currentUser.role === "teacher")
       filteredStudents = filteredStudents.filter(
         (s) => s.circleId === currentUser.circleId,
@@ -1632,7 +1557,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const currentProgramDay = getCurrentProgramDay();
-
     filteredStudents.forEach((student) => {
       if (!student.manualProgress)
         student.manualProgress = { mem: "", cons: "", rev: "" };
@@ -1676,43 +1600,34 @@ document.addEventListener("DOMContentLoaded", () => {
         const memText = getTaskText(student.trackId, "mem", i);
         const consText = getTaskText(student.trackId, "cons", i);
         const revText = getTaskText(student.trackId, "rev", i);
-
         const isMemChecked = student.progress.mem.includes(i) ? "checked" : "";
         const isConsChecked = student.progress.cons.includes(i)
           ? "checked"
           : "";
         const isRevChecked = student.progress.rev.includes(i) ? "checked" : "";
-
         let dayClass = "day-column";
         if (i < currentProgramDay) dayClass += " day-past";
         else if (i === currentProgramDay) dayClass += " day-current";
-
         timelineHTML += `
           <div class="${dayClass}">
             <h4>${getDateLabel(i)}</h4>
             <label class="task-item"><input type="checkbox" name="chk_mem_${i}" value="${i}" ${isMemChecked} ${disableStr}>
-              <div class="task-content"><span class="task-label">📖 حفظ:</span><span class="task-desc">${memText}</span></div>
-            </label>
+              <div class="task-content"><span class="task-label">📖 حفظ:</span><span class="task-desc">${memText}</span></div></label>
             <label class="task-item"><input type="checkbox" name="chk_cons_${i}" value="${i}" ${isConsChecked} ${disableStr}>
-              <div class="task-content"><span class="task-label">🔄 تثبيت:</span><span class="task-desc">${consText}</span></div>
-            </label>
+              <div class="task-content"><span class="task-label">🔄 تثبيت:</span><span class="task-desc">${consText}</span></div></label>
             <label class="task-item"><input type="checkbox" name="chk_rev_${i}" value="${i}" ${isRevChecked} ${disableStr}>
-              <div class="task-content"><span class="task-label">🔁 مراجعة:</span><span class="task-desc">${revText}</span></div>
-            </label>
-          </div>
-        `;
+              <div class="task-content"><span class="task-label">🔁 مراجعة:</span><span class="task-desc">${revText}</span></div></label>
+          </div>`;
       }
       timelineHTML += "</div></div>";
 
       let dropdownHTML = `<details class="dropdown-details"><summary>🔽 عرض تفصيل الأحاديث (تحديد / إلغاء الأحاديث بدقة)</summary><div class="dropdown-content">`;
-
       let memGrid = `<div class="hadith-grid-container"><h5>📖 أحاديث الحفظ:</h5><div class="hadith-grid">`;
       for (let h = 1; h <= totalHadiths; h++) {
         let checked = student.detailedProgress.mem.includes(h) ? "checked" : "";
         memGrid += `<label class="h-item"><input type="checkbox" name="det_mem_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
       }
       memGrid += `</div></div>`;
-
       let consGrid = `<div class="hadith-grid-container"><h5>🔄 أحاديث التثبيت:</h5><div class="hadith-grid">`;
       for (let h = 1; h <= totalHadiths; h++) {
         let checked = student.detailedProgress.cons.includes(h)
@@ -1721,14 +1636,12 @@ document.addEventListener("DOMContentLoaded", () => {
         consGrid += `<label class="h-item"><input type="checkbox" name="det_cons_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
       }
       consGrid += `</div></div>`;
-
       let revGrid = `<div class="hadith-grid-container"><h5>🔁 أحاديث المراجعة:</h5><div class="hadith-grid">`;
       for (let h = 1; h <= totalHadiths; h++) {
         let checked = student.detailedProgress.rev.includes(h) ? "checked" : "";
         revGrid += `<label class="h-item"><input type="checkbox" name="det_rev_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
       }
       revGrid += `</div></div>`;
-
       dropdownHTML += memGrid + consGrid + revGrid + `</div></details>`;
 
       let manualInputHTML = `
@@ -1742,40 +1655,22 @@ document.addEventListener("DOMContentLoaded", () => {
       const card = document.createElement("div");
       card.className = "tracking-card";
       card.innerHTML = `
-        <div class="tracking-header">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <h3 style="margin: 0; color:var(--primary-blue); font-size:1.1rem;">${student.name}</h3>
-            ${progressBadge}
-          </div>
-          ${statusBadge}
-        </div>
+        <div class="tracking-header"><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><h3 style="margin: 0; color:var(--primary-blue); font-size:1.1rem;">${student.name}</h3>${progressBadge}</div>${statusBadge}</div>
         <form class="daily-track-form" data-student-id="${student.id}">
           <div style="margin-bottom: 1.2rem; display:flex; flex-direction:column; gap:10px;">
-            <div class="status-radios">
-              <span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">الحضور:</span>
+            <div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">الحضور:</span>
               <div class="status-radio"><input type="radio" id="present_${student.id}" name="attendance" value="present" ${record?.attendance === "present" ? "checked" : ""} required ${disableStr}><label for="present_${student.id}">حاضر</label></div>
               <div class="status-radio"><input type="radio" id="late_${student.id}" name="attendance" value="late" ${record?.attendance === "late" ? "checked" : ""} ${disableStr}><label for="late_${student.id}">متأخر</label></div>
               <div class="status-radio"><input type="radio" id="absent_${student.id}" name="attendance" value="absent" ${record?.attendance === "absent" ? "checked" : ""} ${disableStr}><label for="absent_${student.id}">غائب</label></div>
             </div>
-            <div class="status-radios">
-              <span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
+            <div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
               <div class="status-radio"><input type="radio" id="time_fajr_${student.id}" name="session_time" value="فجر" ${record?.sessionTime === "فجر" ? "checked" : ""} ${disableStr}><label for="time_fajr_${student.id}">بعد الفجر 🌅</label></div>
               <div class="status-radio"><input type="radio" id="time_asr_${student.id}" name="session_time" value="عصر" ${record?.sessionTime === "عصر" ? "checked" : ""} ${disableStr}><label for="time_asr_${student.id}">بعد العصر 🌇</label></div>
               <div class="status-radio"><input type="radio" id="time_none_${student.id}" name="session_time" value="غير محدد" ${!record?.sessionTime || record?.sessionTime === "غير محدد" ? "checked" : ""} ${disableStr}><label for="time_none_${student.id}">غير محدد</label></div>
             </div>
           </div>
-          
-          <div style="display: ${isGlobalManualMode ? "none" : "block"};">
-            <p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الخطة الزمنية (متابعة بالأيام):</p>
-            ${timelineHTML}
-          </div>
-
-          <div style="display: ${isGlobalManualMode ? "block" : "none"};">
-            <p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الإدخال اليدوي الدقيق (متابعة بالأحاديث):</p>
-            ${manualInputHTML}
-            ${dropdownHTML}
-          </div>
-
+          <div style="display: ${isGlobalManualMode ? "none" : "block"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الخطة الزمنية (متابعة بالأيام):</p>${timelineHTML}</div>
+          <div style="display: ${isGlobalManualMode ? "block" : "none"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الإدخال اليدوي الدقيق (متابعة بالأحاديث):</p>${manualInputHTML}${dropdownHTML}</div>
           <div style="margin-bottom: 1rem; margin-top: 0.5rem;"><label style="font-weight:700; display:block; font-size:0.8rem; margin-bottom:3px;">ملاحظات المعلم:</label><input type="text" name="notes" class="modern-input" placeholder="مثال: الطالب متميز اليوم..." value="${record?.notes || ""}" ${disableStr}></div>
           ${isEditable ? `<button type="submit" class="btn-submit" style="width:auto; padding: 0.5rem 1.5rem;">💾 حفظ إنجاز الطالب</button>` : `<p style="color:var(--danger-btn); font-weight:bold; margin:0; font-size:0.85rem;">انتهت فترة التعديل (24 ساعة).</p>`}
         </form>
@@ -1785,7 +1680,6 @@ document.addEventListener("DOMContentLoaded", () => {
         setupDetailedSync(card, student, "mem");
         setupDetailedSync(card, student, "cons");
         setupDetailedSync(card, student, "rev");
-
         card
           .querySelector(".daily-track-form")
           .addEventListener("submit", (e) => {
@@ -1793,7 +1687,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const att = e.target.elements["attendance"].value;
             const sTime = e.target.elements["session_time"].value;
             const notes = e.target.elements["notes"].value;
-
             let newMem = [],
               newCons = [],
               newRev = [];
@@ -1814,7 +1707,6 @@ document.addEventListener("DOMContentLoaded", () => {
               )
                 newRev.push(i);
             }
-
             student.progress.mem = newMem;
             student.progress.cons = newCons;
             student.progress.rev = newRev;
@@ -1827,7 +1719,6 @@ document.addEventListener("DOMContentLoaded", () => {
             student.manualProgress.rev = e.target.elements["manual_rev"]
               ? e.target.elements["manual_rev"].value
               : "";
-
             let detMem = [],
               detCons = [],
               detRev = [];
@@ -1855,7 +1746,6 @@ document.addEventListener("DOMContentLoaded", () => {
               notes,
               timestamp: Date.now(),
             };
-
             if (existingRecordIndex > -1)
               window.db.dailyRecords[existingRecordIndex] = newRecord;
             else window.db.dailyRecords.push(newRecord);
