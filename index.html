@@ -403,12 +403,10 @@
                 <div class="input-group">
                   <select id="stu-track" class="modern-input" required></select>
                 </div>
-                <!-- الحقل الجديد الذكي لاختيار الحلقة -->
+                <!-- تم التعديل: تظهر الحلقات كاملة هنا مباشرة -->
                 <div class="input-group">
                   <select id="stu-circle" class="modern-input" required>
-                    <option value="" disabled selected>
-                      اختر المسار أولاً لتظهر الحلقات...
-                    </option>
+                    <option value="" disabled selected>اختر الحلقة...</option>
                   </select>
                 </div>
 
@@ -572,14 +570,56 @@
                     required
                   />
                 </div>
+
+                <!-- التعديل الجديد: تحديد نوع الحلقة بأزرار واضحة -->
                 <div class="input-group">
-                  <label>المسار المخصص للحلقة</label
-                  ><select
-                    id="new-circle-track"
-                    class="modern-input"
-                    required
-                  ></select>
+                  <label>نوع الحلقة</label>
+                  <div
+                    style="
+                      display: flex;
+                      gap: 15px;
+                      margin-top: 8px;
+                      background: #f8fafc;
+                      padding: 10px;
+                      border-radius: 6px;
+                      border: 1px solid var(--border-color);
+                    "
+                  >
+                    <label
+                      style="
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        gap: 5px;
+                      "
+                      ><input
+                        type="radio"
+                        name="circle_type"
+                        value="specific"
+                        checked
+                      />
+                      مخصصة لمسار</label
+                    >
+                    <label
+                      style="
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        gap: 5px;
+                        color: var(--primary-blue);
+                        font-weight: bold;
+                      "
+                      ><input type="radio" name="circle_type" value="all" />
+                      حلقة عامة (كل المسارات)</label
+                    >
+                  </div>
                 </div>
+
+                <div class="input-group" id="circle-track-container">
+                  <label>المسار المخصص للحلقة</label>
+                  <select id="new-circle-track" class="modern-input"></select>
+                </div>
+
                 <div class="input-group">
                   <label>المعلم المكلف</label
                   ><select
