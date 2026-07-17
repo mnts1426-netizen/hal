@@ -403,10 +403,12 @@
                 <div class="input-group">
                   <select id="stu-track" class="modern-input" required></select>
                 </div>
-                <!-- تم التعديل: تظهر الحلقات كاملة هنا مباشرة -->
+                <!-- تم فك الارتباط الإجباري (required) للسماح بتسجيل الطالب بدون حلقة مؤقتاً -->
                 <div class="input-group">
-                  <select id="stu-circle" class="modern-input" required>
-                    <option value="" disabled selected>اختر الحلقة...</option>
+                  <select id="stu-circle" class="modern-input">
+                    <option value="" selected>
+                      اختر الحلقة (اختياري / أو يوزع لاحقاً)...
+                    </option>
                   </select>
                 </div>
 
@@ -571,7 +573,6 @@
                   />
                 </div>
 
-                <!-- التعديل الجديد: تحديد نوع الحلقة بأزرار واضحة -->
                 <div class="input-group">
                   <label>نوع الحلقة</label>
                   <div
@@ -955,7 +956,6 @@
       </main>
     </div>
 
-    <!-- نوافذ التعديل -->
     <div id="edit-modal" class="modal-overlay">
       <div class="modal-content">
         <h2
