@@ -15,13 +15,11 @@
       ⚠️ انقطع الاتصال بالإنترنت! النظام يعمل الآن في وضع عدم الاتصال ويحفظ
       بياناتك محلياً بشكل آمن.
     </div>
-
     <img
       src="شعار برنامج حفظ السنة.jpg.jpeg"
       class="print-watermark"
       alt="Watermark"
     />
-
     <div id="global-loader"><div class="spinner"></div></div>
 
     <div id="login-screen" class="wathbah-login-theme" style="display: none">
@@ -68,7 +66,6 @@
     <div id="main-app-content" class="app-layout" style="display: none">
       <header class="mobile-header">
         <h2 style="font-size: 1.2rem">إدارة الحلقات</h2>
-        <!-- تم وضع كود الفتح الفوري لضمان الاستجابة السريعة في الجوال -->
         <button
           class="mobile-menu-btn"
           onclick="
@@ -79,7 +76,6 @@
           ☰
         </button>
       </header>
-      <!-- تم وضع كود الإغلاق الفوري هنا -->
       <div
         class="sidebar-overlay"
         id="sidebar-overlay"
@@ -282,9 +278,7 @@
             <div></div>
             <h2>لوحة التحكم 📊</h2>
           </div>
-          <div class="stats-grid" id="main-dashboard-grid">
-            <!-- سيتم توليد الإحصائيات هنا برمجياً -->
-          </div>
+          <div class="stats-grid" id="main-dashboard-grid"></div>
         </div>
 
         <div id="tracks" class="app-section">
@@ -353,20 +347,52 @@
               style="margin-bottom: 0"
               id="add-student-card"
             >
-              <h3 class="content-card-title">إضافة طالب</h3>
+              <h3 class="content-card-title">إضافة طالب وتسجيله</h3>
               <form id="add-student-form">
                 <div class="input-group">
                   <input
                     type="text"
                     id="stu-name"
                     class="modern-input"
-                    placeholder="اسم الطالب"
+                    placeholder="الاسم الرباعي للطالب"
                     required
                   />
                 </div>
+                <div style="display: flex; gap: 10px">
+                  <div class="input-group" style="flex: 1">
+                    <input
+                      type="text"
+                      id="stu-id-number"
+                      class="modern-input"
+                      placeholder="رقم الهوية / الإقامة"
+                      required
+                    />
+                  </div>
+                  <div class="input-group" style="flex: 1">
+                    <input
+                      type="tel"
+                      id="stu-phone"
+                      class="modern-input"
+                      placeholder="رقم الجوال"
+                      required
+                    />
+                  </div>
+                </div>
+                <div class="input-group">
+                  <input
+                    type="password"
+                    id="stu-pin"
+                    class="modern-input"
+                    placeholder="الرقم السري (للدخول) - افتراضي 1234"
+                    maxlength="4"
+                    value="1234"
+                    required
+                  />
+                </div>
+
                 <div class="input-group">
                   <select id="stu-level" class="modern-input" required>
-                    <option value="" disabled selected>المرحلة</option>
+                    <option value="" disabled selected>المرحلة الدراسية</option>
                     <option value="الابتدائية">الابتدائية</option>
                     <option value="المتوسطة">المتوسطة</option>
                     <option value="الثانوية">الثانوية</option>
@@ -377,7 +403,18 @@
                 <div class="input-group">
                   <select id="stu-track" class="modern-input" required></select>
                 </div>
-                <button type="submit" class="btn-submit">تسجيل الطالب</button>
+                <!-- الحقل الجديد الذكي لاختيار الحلقة -->
+                <div class="input-group">
+                  <select id="stu-circle" class="modern-input" required>
+                    <option value="" disabled selected>
+                      اختر المسار أولاً لتظهر الحلقات...
+                    </option>
+                  </select>
+                </div>
+
+                <button type="submit" class="btn-submit">
+                  حفظ وتوزيع الطالب
+                </button>
               </form>
             </div>
 
@@ -462,7 +499,7 @@
                   <th>المرحلة</th>
                   <th>المسار</th>
                   <th>الحلقة</th>
-                  <th>تعديل</th>
+                  <th>إجراءات</th>
                 </tr>
               </thead>
               <tbody id="students-list-body"></tbody>
@@ -557,7 +594,7 @@
               </form>
             </div>
             <div class="content-card" style="margin-bottom: 0">
-              <h3 class="content-card-title">توزيع الطلاب على الحلقات</h3>
+              <h3 class="content-card-title">توزيع الطلاب يدوياً</h3>
               <p
                 style="
                   font-size: 0.85rem;
@@ -565,8 +602,7 @@
                   margin-bottom: 10px;
                 "
               >
-                النظام يوزع الطلاب تلقائياً حسب المسار، استخدم هذا القسم للتعديل
-                الاستثنائي فقط.
+                لنقل أو إضافة طلاب مسجلين مسبقاً إلى حلقة محددة.
               </p>
               <form id="assign-students-form">
                 <div class="input-group">
@@ -578,7 +614,7 @@
                   ></select>
                 </div>
                 <div class="input-group">
-                  <label>الطلاب المسجلين في نفس مسار الحلقة:</label>
+                  <label>الطلاب المتاحين للحلقة:</label>
                   <div
                     id="unassigned-students-list"
                     style="
@@ -732,8 +768,8 @@
                 style="margin: 0; flex: 1"
                 id="report-filter-group"
               >
-                <label>تخصيص التقرير (الحلقة)</label>
-                <select id="report-circle-filter" class="modern-input">
+                <label>تخصيص التقرير (الحلقة)</label
+                ><select id="report-circle-filter" class="modern-input">
                   <option value="all">كافة الحلقات</option>
                 </select>
               </div>
@@ -800,14 +836,12 @@
                 <button type="submit" class="btn-submit">تحديث البيانات</button>
               </form>
             </div>
-
             <div class="content-card">
               <h3 class="content-card-title">التواصل والدعم 📞</h3>
               <div
                 id="dynamic-support-info"
                 style="margin-bottom: 1.5rem"
               ></div>
-
               <hr
                 style="
                   border: 0;
@@ -956,7 +990,6 @@
       </div>
     </div>
 
-    <!-- إضافة مكتبات Firebase الرسمية -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="firebase.js"></script>
