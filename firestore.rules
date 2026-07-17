@@ -32,6 +32,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // 6. صندوق الرسائل الذكي
+    match /messages/{document=**} {
+      allow read, write: if true;
+    }
+
     // إغلاق أي جداول أخرى غير مستخدمة لحماية قاعدة البيانات
     match /{document=**} {
       allow read, write: if false;
