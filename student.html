@@ -20,7 +20,6 @@
 
     <div id="global-loader"><div class="spinner"></div></div>
 
-    <!-- شاشة الدخول الخاصة بالطالب -->
     <div
       id="student-login-screen"
       class="wathbah-login-theme"
@@ -37,7 +36,7 @@
               type="text"
               id="login-id-number"
               class="w-input"
-              placeholder="رقم الهوية / الإقامة"
+              placeholder="رقم الجوال أو رقم الهوية"
               required
             />
           </div>
@@ -57,7 +56,6 @@
       </div>
     </div>
 
-    <!-- لوحة تحكم الطالب (Dashboard) -->
     <div
       id="student-dashboard"
       style="
@@ -69,7 +67,6 @@
         z-index: 1;
       "
     >
-      <!-- ترويسة الترحيب -->
       <div
         style="
           background: var(--primary-blue);
@@ -134,7 +131,6 @@
         </button>
       </div>
 
-      <!-- إحصائيات الإنجاز -->
       <div
         style="
           display: grid;
@@ -167,7 +163,6 @@
         </div>
       </div>
 
-      <!-- مقرر اليوم -->
       <div
         class="content-card"
         style="
@@ -200,7 +195,6 @@
             >--</span
           >
         </h3>
-
         <div
           style="
             background: #f8fafc;
@@ -225,7 +219,6 @@
             >--</span
           >
         </div>
-
         <div
           style="
             background: #f8fafc;
@@ -250,7 +243,6 @@
             >--</span
           >
         </div>
-
         <div
           style="
             background: #f8fafc;
@@ -276,7 +268,6 @@
         </div>
       </div>
 
-      <!-- حالة تسميع اليوم -->
       <div
         class="content-card"
         style="padding: 1.2rem; text-align: center"
@@ -299,7 +290,70 @@
         </div>
       </div>
 
-      <!-- تغيير الرقم السري -->
+      <!-- صندوق إرسال الرسائل الجديد للطالب -->
+      <div
+        class="content-card"
+        style="
+          padding: 1.2rem;
+          border-top: none;
+          border-right: 4px solid var(--primary-blue);
+          margin-bottom: 1.5rem;
+        "
+      >
+        <h3
+          style="
+            font-size: 1.1rem;
+            color: var(--primary-blue);
+            font-weight: 800;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          "
+        >
+          📬 إرسال ملاحظة أو استفسار
+        </h3>
+        <form
+          id="student-message-form"
+          style="display: flex; flex-direction: column; gap: 10px"
+        >
+          <div class="input-group" style="margin: 0">
+            <select id="msg-target" class="modern-input" required>
+              <option value="" disabled selected>
+                اختر الجهة الموجهة إليها...
+              </option>
+              <option value="teacher">معلم الحلقة</option>
+              <option value="admin">إدارة المجمع / الإشراف</option>
+            </select>
+          </div>
+          <div class="input-group" style="margin: 0">
+            <input
+              type="text"
+              id="msg-subject"
+              class="modern-input"
+              placeholder="عنوان الرسالة (مثال: استفسار عن المنهج)..."
+              required
+            />
+          </div>
+          <div class="input-group" style="margin: 0">
+            <textarea
+              id="msg-text"
+              class="modern-input"
+              rows="3"
+              placeholder="اكتب رسالتك هنا بوضوح..."
+              required
+            ></textarea>
+          </div>
+          <button
+            type="submit"
+            class="btn-submit"
+            style="width: auto; align-self: flex-start; padding: 0.6rem 1.5rem"
+          >
+            إرسال الرسالة 🚀
+          </button>
+        </form>
+      </div>
+
       <details
         style="
           margin-top: 1rem;
@@ -370,9 +424,10 @@
       </div>
     </div>
 
-    <!-- مكتبات Firebase (نفسها الموجودة في الإدارة) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <!-- مكتبة المراسلة للإشعارات -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
     <script src="firebase.js"></script>
     <script src="student-app.js"></script>
   </body>
