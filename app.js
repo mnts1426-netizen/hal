@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
     VIEW_REPORTS: "view_reports",
     RECORD_ATTENDANCE: "record_attendance",
     MANAGE_ALL_RECORDS: "manage_all_records",
+    SEND_NOTIFICATIONS: "send_notifications", // صلاحية الإشعارات
   };
 
   const ROLE_PERMISSIONS = {
@@ -38,13 +39,13 @@ document.addEventListener("DOMContentLoaded", () => {
       PERMISSIONS.VIEW_AUDIT_LOGS,
       PERMISSIONS.MANAGE_SETTINGS,
       PERMISSIONS.MANAGE_ALL_RECORDS,
+      PERMISSIONS.SEND_NOTIFICATIONS, // المشرف يمتلك صلاحية الإشعارات
     ],
     teacher: [
       PERMISSIONS.RECORD_ATTENDANCE,
       PERMISSIONS.VIEW_DASHBOARD,
       PERMISSIONS.VIEW_REPORTS,
       PERMISSIONS.MANAGE_SETTINGS,
-      PERMISSIONS.MANAGE_STUDENTS,
     ],
   };
 
@@ -336,10 +337,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return nums ? Math.max(...nums.map(Number)) : 0;
   }
 
-  // ==========================================
-  // النظام السحابي الجديد: دقيق وموجه لكل مستند
-  // ==========================================
-
   function saveLocalDB() {
     localStorage.setItem("wathbah_db", JSON.stringify(window.db));
   }
@@ -364,7 +361,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ==========================================
+  // --- تفعيل وطلب رمز الإشعارات (FCM Token) للمدير والمشرف والمعلم ---
+  async function requestFCMToken(userObj, collection) {
+    if (
+      typeof firebase !== "undefined" &&
+      firebase.messaging &&
+      firebase.messaging.isSupported()
+    ) {
+      try {
+        const messaging = firebase.messaging();
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          // استبدل بـ VAPID Key الخاص بك
+          const token = await messaging.getToken({
+            vapidKey: "YOUR_PUBLIC_VAPID_KEY_HERE",
+          });
+          if (token && userObj.fcmToken !== token) {
+            userObj.fcmToken = token;
+            await syncToFirestore(collection, userObj.id, userObj);
+          }
+        }
+      } catch (error) {
+        console.log(
+          "لم يتم تفعيل الإشعارات لهذا الجهاز أو المتصفح لا يدعمها.",
+          error,
+        );
+      }
+    }
+  }
 
   async function initDB() {
     try {
@@ -376,9 +400,14 @@ document.addEventListener("DOMContentLoaded", () => {
         .collection("auditLogs")
         .orderBy("timestamp", "desc")
         .limit(50)
-        .get(); // جلب آخر 50 عملية فقط
+        .get();
 
-      // التنظيف الآمن للبيانات القديمة (Data Normalization)
+      const messagesSnap = await dbFirestore
+        .collection("messages")
+        .orderBy("timestamp", "desc")
+        .get();
+      let loadedMessages = messagesSnap.docs.map((doc) => doc.data());
+
       let loadedStudents = studentsSnap.docs.map((doc) => {
         let s = doc.data();
         if (!s.progress) s.progress = { mem: [], cons: [], rev: [] };
@@ -389,6 +418,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!s.trackId) s.trackId = "";
         if (!s.circleId) s.circleId = "";
         if (!s.level) s.level = "غير محدد";
+        // التوافق مع السجلات القديمة وحماية النظام إذا لم يكن هناك جوال مسجل
+        if (!s.phone) s.phone = "";
+        if (!s.idNumber) s.idNumber = "";
         return s;
       });
 
@@ -399,6 +431,8 @@ document.addEventListener("DOMContentLoaded", () => {
       let loadedUsers = { admin: [], supervisor: [], teacher: [] };
       usersSnap.docs.forEach((doc) => {
         let u = doc.data();
+        // التوافق مع المعلمين القدامى
+        if (!u.phone) u.phone = "";
         if (u.role && loadedUsers[u.role]) loadedUsers[u.role].push(u);
       });
 
@@ -406,9 +440,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (loadedUsers.admin.length === 0) {
         const defaultAdmin = {
           id: "a1",
-          name: "أ. عبدالله",
+          name: "عبدالله",
           role: "admin",
-          pin: "0000",
+          pin: "1234",
+          phone: "0500000000",
         };
         loadedUsers.admin.push(defaultAdmin);
         isFirstSeed = true;
@@ -422,14 +457,11 @@ document.addEventListener("DOMContentLoaded", () => {
         users: loadedUsers,
         dailyRecords: loadedRecords,
         auditLogs: loadedLogs,
+        messages: loadedMessages,
       };
 
       saveLocalDB();
-
-      // التأسيس الأولي فقط يكتب للسحابة لمرة واحدة في عمر النظام
-      if (isFirstSeed) {
-        syncToFirestore("users", "a1", window.db.users.admin[0]);
-      }
+      if (isFirstSeed) syncToFirestore("users", "a1", window.db.users.admin[0]);
     } catch (e) {
       console.warn("استخدام النسخة المحلية للبيانات بسبب انقطاع الاتصال.", e);
       const stored = localStorage.getItem("wathbah_db");
@@ -437,6 +469,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.db = JSON.parse(stored);
         window.db.tracks = tracksDefinition;
         window.db.scheduleData = scheduleData;
+        if (!window.db.messages) window.db.messages = [];
       } else {
         window.db = {
           tracks: tracksDefinition,
@@ -445,13 +478,20 @@ document.addEventListener("DOMContentLoaded", () => {
           students: [],
           users: {
             admin: [
-              { id: "a1", name: "أ. عبدالله", role: "admin", pin: "0000" },
+              {
+                id: "a1",
+                name: "عبدالله",
+                role: "admin",
+                pin: "1234",
+                phone: "",
+              },
             ],
             supervisor: [],
             teacher: [],
           },
           dailyRecords: [],
           auditLogs: [],
+          messages: [],
         };
       }
     }
@@ -481,14 +521,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.db.auditLogs.unshift(newLog);
     saveLocalDB();
-    syncToFirestore("auditLogs", logId, newLog); // يكتب مستند واحد فقط للعملية
+    syncToFirestore("auditLogs", logId, newLog);
 
-    // إزالة أقدم عملية إذا تجاوزنا 50 (تنظيف السحابة)
     if (window.db.auditLogs.length > 50) {
       const oldLog = window.db.auditLogs.pop();
       if (oldLog.id) deleteFromFirestore("auditLogs", oldLog.id);
     }
-
     renderLogs();
   }
 
@@ -504,6 +542,57 @@ document.addEventListener("DOMContentLoaded", () => {
     `,
       )
       .join("");
+  }
+
+  function renderMessages() {
+    const container = document.getElementById("messages-container");
+    if (!container) return;
+    container.innerHTML = "";
+
+    let visibleMessages = window.db.messages || [];
+
+    if (currentUser.role === "teacher") {
+      visibleMessages = visibleMessages.filter(
+        (m) =>
+          (m.receiverType === "teacher" &&
+            m.circleId === currentUser.circleId) ||
+          m.senderId === currentUser.id,
+      );
+    } else {
+      visibleMessages = visibleMessages.filter(
+        (m) => m.receiverType === "admin",
+      );
+    }
+
+    if (visibleMessages.length === 0) {
+      container.innerHTML =
+        "<p style='text-align:center; color:var(--text-gray); padding:2rem; background:#fff; border-radius:8px;'>📭 لا توجد رسائل جديدة.</p>";
+      return;
+    }
+
+    visibleMessages.forEach((msg) => {
+      const roleName =
+        msg.senderRole === "student"
+          ? "طالب"
+          : msg.senderRole === "teacher"
+            ? "معلم"
+            : "مشرف";
+      const toText =
+        msg.receiverType === "admin" ? "الإدارة / الإشراف" : "معلم الحلقة";
+      container.innerHTML += `
+           <div class="content-card" style="margin-bottom:0; border-right: 4px solid var(--primary-blue); padding: 1.2rem;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+                 <div>
+                    <strong style="color:var(--primary-blue); font-size:1.1rem;">${msg.senderName} <span style="font-size:0.8rem; color:gray;">(${roleName})</span></strong>
+                    <div style="font-size:0.8rem; color:var(--text-gray); margin-top:4px;">إلى: ${toText}</div>
+                 </div>
+                 <span style="font-size:0.8rem; background:#f1f5f9; padding:4px 8px; border-radius:4px; color:var(--text-gray);" dir="ltr">${msg.date}</span>
+              </div>
+              <h4 style="margin-bottom:8px; font-weight:800; color:var(--gold-text);">${msg.subject}</h4>
+              <p style="font-size:0.9rem; line-height:1.6; white-space: pre-wrap; margin:0; color:var(--text-dark);">${msg.text}</p>
+           </div>
+        `;
+    });
   }
 
   const loginScreen = document.getElementById("login-screen");
@@ -567,6 +656,9 @@ document.addEventListener("DOMContentLoaded", () => {
           ? "block"
           : "none";
 
+    // تفعيل الإشعارات وتسجيل الـ Token في السحابة
+    requestFCMToken(currentUser, "users");
+
     const firstBtn = document.querySelector('.nav-btn[style*="display: flex"]');
     if (firstBtn) firstBtn.click();
 
@@ -577,7 +669,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     refreshAllViews();
 
-    // منع تكرار كتابة التسجيل في السحابة إذا كان دخولاً تلقائياً
     if (!isAutoSession) {
       addLog("تسجيل الدخول للنظام", "عام");
     }
@@ -679,6 +770,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDynamicDropdowns();
     updateDashboardStats();
     updateSupportInfo();
+    renderMessages();
     if (currentUser && currentUser.role === "teacher") renderDailyTracking("");
     else renderAdminRecords();
     generateReport();
@@ -700,11 +792,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const supportDiv = document.getElementById("dynamic-support-info");
     if (!supportDiv) return;
     if (currentUser.role === "teacher") {
-      supportDiv.innerHTML = `<div style="background: var(--bg-main); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); border-right: 3px solid var(--primary-blue);"><strong>🏢 التواصل مع الإدارة:</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">يرجى التواصل مع المشرف المباشر لحلقتك أو إدارة المجمع لأي استفسارات إدارية وأكاديمية.</span></div>`;
-    } else if (currentUser.role === "supervisor") {
-      supportDiv.innerHTML = `<div style="background: var(--bg-main); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); border-right: 3px solid var(--primary-blue);"><strong>👑 التواصل مع المدير:</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">يرجى التواصل مع مدير المجمع لاعتماد القرارات أو رفع الملاحظات الشاملة.</span></div>`;
-    } else if (currentUser.role === "admin") {
-      supportDiv.innerHTML = `<div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid #e2e8f0; border-right: 3px solid var(--gold-text);"><strong style="color: var(--primary-blue);">⚙️ الدعم الفني للنظام (مطور النظام):</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">لأي تعديلات أو دعم فني مخصص للنظام، يرجى التواصل مباشرة.</span><br/><a href="https://wa.me/966537466925" target="_blank" style="display:inline-block; margin-top:8px; background: #25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration: none; font-weight:bold; font-size:0.85rem;">💬 تواصل عبر واتساب: 966537466925+</a></div>`;
+      supportDiv.innerHTML = `<div style="background: var(--bg-main); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); border-right: 3px solid var(--primary-blue);"><strong>🏢 التواصل مع الإدارة:</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">يمكنك كتابة رسالة من المربع بالأسفل وستصل للإدارة فوراً.</span></div>`;
+    } else if (
+      currentUser.role === "supervisor" ||
+      currentUser.role === "admin"
+    ) {
+      supportDiv.innerHTML = `<div style="background: var(--bg-main); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); border-right: 3px solid var(--primary-blue);"><strong>📬 صندوق الرسائل مفعّل:</strong> <br /><span style="color: var(--text-gray); font-size:0.85rem;">أنت تستقبل الرسائل من المعلمين والطلاب في تبويب "صندوق الرسائل".</span></div>`;
     }
   }
 
@@ -713,9 +806,96 @@ document.addEventListener("DOMContentLoaded", () => {
       .getElementById("support-message-form")
       .addEventListener("submit", (e) => {
         e.preventDefault();
-        alert("تم إرسال رسالتك أو ملاحظتك بنجاح! سيتم مراجعتها في أقرب وقت.");
+        const subject = e.target.querySelector('input[type="text"]').value;
+        const text = e.target.querySelector("textarea").value;
+
+        const newMsg = {
+          id: "msg_" + Date.now(),
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderRole: currentUser.role,
+          receiverType: "admin",
+          circleId: currentUser.circleId || "",
+          subject: subject,
+          text: text,
+          timestamp: Date.now(),
+          date: new Date().toLocaleString("ar-SA"),
+        };
+
+        if (!window.db.messages) window.db.messages = [];
+        window.db.messages.unshift(newMsg);
+        syncToFirestore("messages", newMsg.id, newMsg);
+        saveLocalDB();
+        renderMessages();
+
+        alert("تم إرسال رسالتك للإدارة بنجاح! 🚀");
         e.target.reset();
       });
+  }
+
+  // --- برمجة الإشعارات الفورية (الجديدة) ---
+  const notifTargetType = document.getElementById("notif-target-type");
+  const notifUserGroup = document.getElementById("notif-user-select-group");
+  const notifTargetUser = document.getElementById("notif-target-user");
+
+  if (notifTargetType) {
+    notifTargetType.addEventListener("change", (e) => {
+      const val = e.target.value;
+      if (val.startsWith("specific_")) {
+        notifUserGroup.style.display = "block";
+        notifTargetUser.innerHTML =
+          '<option value="" disabled selected>اختر المستخدم...</option>';
+        let list = [];
+        if (val === "specific_student") list = window.db.students;
+        else if (val === "specific_teacher") list = window.db.users.teacher;
+        else if (val === "specific_supervisor")
+          list = window.db.users.supervisor;
+
+        list.forEach((u) => {
+          const phoneStr = u.phone ? ` (${u.phone})` : "";
+          notifTargetUser.innerHTML += `<option value="${u.id}">${u.name}${phoneStr}</option>`;
+        });
+      } else {
+        notifUserGroup.style.display = "none";
+      }
+    });
+
+    const notifForm = document.getElementById("send-notification-form");
+    if (notifForm) {
+      notifForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const title = document.getElementById("notif-title").value;
+        const body = document.getElementById("notif-body").value;
+        const type = notifTargetType.value;
+        const targetId = notifTargetUser.value;
+
+        if (type.startsWith("specific_") && !targetId)
+          return alert("الرجاء تحديد المستخدم المطلوب.");
+
+        const notifData = {
+          id: "notif_" + Date.now(),
+          title: title,
+          body: body,
+          targetType: type,
+          targetId: targetId || "all",
+          senderId: currentUser.id,
+          timestamp: Date.now(),
+          date: new Date().toLocaleString("ar-SA"),
+        };
+
+        try {
+          await dbFirestore
+            .collection("notifications_queue")
+            .doc(notifData.id)
+            .set(notifData);
+          alert("تم حفظ وإرسال الإشعار بنجاح! 🚀");
+          e.target.reset();
+          notifUserGroup.style.display = "none";
+        } catch (err) {
+          alert("فشل إرسال الإشعار، تأكد من الاتصال.");
+        }
+      });
+    }
   }
 
   function updateTopBanner() {
@@ -894,11 +1074,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const sTrackId = document.getElementById("stu-track").value;
       const selectedCircleId = document.getElementById("stu-circle").value;
 
+      const idInput = document.getElementById("stu-id-number");
+      const phoneInput = document.getElementById("stu-phone");
+
       const newStudent = {
         id: "s" + Date.now(),
         name: sName,
-        idNumber: document.getElementById("stu-id-number").value,
-        phone: document.getElementById("stu-phone").value,
+        // رقم الهوية أصبح اختيارياً
+        idNumber: idInput ? idInput.value : "",
+        phone: phoneInput ? phoneInput.value : "",
         pin: document.getElementById("stu-pin").value,
         level: document.getElementById("stu-level").value,
         trackId: sTrackId,
@@ -930,10 +1114,13 @@ document.addEventListener("DOMContentLoaded", () => {
     addTeacherForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const tName = document.getElementById("teacher-name").value;
+      const phoneInput = document.getElementById("teacher-phone");
+
       const newTeacher = {
         id: "tech" + Date.now(),
         name: tName,
         pin: document.getElementById("teacher-pin").value,
+        phone: phoneInput ? phoneInput.value : "",
         circleId: "",
         role: "teacher",
       };
@@ -952,10 +1139,12 @@ document.addEventListener("DOMContentLoaded", () => {
     addSupervisorForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const supName = document.getElementById("supervisor-name").value;
+      const phoneInput = document.getElementById("supervisor-phone");
+
       const newSup = {
         id: "sup" + Date.now(),
         name: supName,
-        phone: document.getElementById("supervisor-phone").value,
+        phone: phoneInput ? phoneInput.value : "",
         pin: document.getElementById("supervisor-pin").value,
         role: "supervisor",
       };
@@ -1132,7 +1321,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const student = window.db.students.find((s) => s.id === studentId);
       window.db.students = window.db.students.filter((s) => s.id !== studentId);
 
-      // إزالة ومسح سجلاته اليومية فوراً
       window.db.dailyRecords = window.db.dailyRecords.filter((r) => {
         if (r.studentId === studentId) {
           deleteFromFirestore("dailyRecords", r.studentId + "_" + r.date);
@@ -1272,10 +1460,11 @@ document.addEventListener("DOMContentLoaded", () => {
         circleOpts += `<option value="${c.id}" ${s.circleId === c.id ? "selected" : ""}>${c.name}</option>`;
       });
 
+      // إضافة رقم الجوال وجعل الهوية اختيارية في واجهة التعديل
       fields.innerHTML = `
         <div class="input-group"><label>اسم الطالب</label><input type="text" id="edit-stu-name" class="modern-input" value="${s.name}" required></div>
         <div style="display:flex; gap:10px;">
-          <div class="input-group" style="flex:1"><label>رقم الهوية</label><input type="text" id="edit-stu-id" class="modern-input" value="${s.idNumber || ""}" required></div>
+          <div class="input-group" style="flex:1"><label>رقم الهوية</label><input type="text" id="edit-stu-id" class="modern-input" value="${s.idNumber || ""}"></div>
           <div class="input-group" style="flex:1"><label>رقم الجوال</label><input type="tel" id="edit-stu-phone" class="modern-input" value="${s.phone || ""}" required></div>
         </div>
         <div class="input-group"><label>الرقم السري</label><input type="password" id="edit-stu-pin" class="modern-input" value="${s.pin || "1234"}" maxlength="4" required></div>
@@ -1292,8 +1481,10 @@ document.addEventListener("DOMContentLoaded", () => {
         (c) =>
           (cOpts += `<option value="${c.id}" ${t.circleId === c.id ? "selected" : ""}>${c.name}</option>`),
       );
+      // إضافة رقم الجوال للمعلم في واجهة التعديل
       fields.innerHTML = `
         <div class="input-group"><label>اسم المعلم</label><input type="text" id="edit-teacher-name" class="modern-input" value="${t.name}" required></div>
+        <div class="input-group"><label>رقم الجوال</label><input type="tel" id="edit-teacher-phone" class="modern-input" value="${t.phone || ""}" required></div>
         <div class="input-group"><label>الرقم السري</label><input type="text" id="edit-teacher-pin" class="modern-input" value="${t.pin}" pattern="\\d{4}" maxlength="4" required></div>
         <div class="input-group"><label>الحلقة المكلف بها</label><select id="edit-teacher-circle" class="modern-input">${cOpts}</select></div>
       `;
@@ -1366,7 +1557,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const s = window.db.students.find((x) => x.id === editingContext.id);
       if (s) {
         s.name = document.getElementById("edit-stu-name").value;
-        s.idNumber = document.getElementById("edit-stu-id").value;
+        const idInput = document.getElementById("edit-stu-id");
+        s.idNumber = idInput ? idInput.value : "";
         s.phone = document.getElementById("edit-stu-phone").value;
         s.pin = document.getElementById("edit-stu-pin").value;
         s.trackId = document.getElementById("edit-stu-track").value;
@@ -1378,6 +1570,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const t = window.db.users.teacher.find((x) => x.id === editingContext.id);
       if (t) {
         t.name = document.getElementById("edit-teacher-name").value;
+        t.phone = document.getElementById("edit-teacher-phone").value;
         t.pin = document.getElementById("edit-teacher-pin").value;
         const newCircleId = document.getElementById(
           "edit-teacher-circle",
@@ -1561,6 +1754,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <option value="" disabled ${!record ? "selected" : ""}>لم يحضر</option>
           <option value="present" ${record && record.attendance === "present" ? "selected" : ""}>حاضر</option>
           <option value="late" ${record && record.attendance === "late" ? "selected" : ""}>متأخر</option>
+          <option value="excused" ${record && record.attendance === "excused" ? "selected" : ""}>مستأذن</option>
           <option value="absent" ${record && record.attendance === "absent" ? "selected" : ""}>غائب</option>
         </select>
       `;
@@ -1667,6 +1861,9 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (record.attendance === "late") {
           attText = "متأخر";
           attColor = "#b45309";
+        } else if (record.attendance === "excused") {
+          attText = "مستأذن";
+          attColor = "#0369a1";
         } else if (record.attendance === "absent") {
           attText = "غائب";
           attColor = "#991b1b";
@@ -1895,6 +2092,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">الحضور:</span>
               <div class="status-radio"><input type="radio" id="present_${student.id}" name="attendance" value="present" ${record && record.attendance === "present" ? "checked" : ""} required ${disableStr}><label for="present_${student.id}">حاضر</label></div>
               <div class="status-radio"><input type="radio" id="late_${student.id}" name="attendance" value="late" ${record && record.attendance === "late" ? "checked" : ""} ${disableStr}><label for="late_${student.id}">متأخر</label></div>
+              <div class="status-radio"><input type="radio" id="excused_${student.id}" name="attendance" value="excused" ${record && record.attendance === "excused" ? "checked" : ""} ${disableStr}><label for="excused_${student.id}">مستأذن</label></div>
               <div class="status-radio"><input type="radio" id="absent_${student.id}" name="attendance" value="absent" ${record && record.attendance === "absent" ? "checked" : ""} ${disableStr}><label for="absent_${student.id}">غائب</label></div>
             </div>
             <div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
@@ -1969,7 +2167,6 @@ document.addEventListener("DOMContentLoaded", () => {
             student.detailedProgress.cons = detCons;
             student.detailedProgress.rev = detRev;
 
-            // تحديث إنجاز الطالب في السحابة
             syncToFirestore("students", student.id, student);
 
             let existingRecordIndex = window.db.dailyRecords.findIndex(
@@ -1987,7 +2184,6 @@ document.addEventListener("DOMContentLoaded", () => {
               window.db.dailyRecords[existingRecordIndex] = newRecord;
             else window.db.dailyRecords.push(newRecord);
 
-            // تحديث سجل المتابعة في السحابة
             syncToFirestore(
               "dailyRecords",
               student.id + "_" + today,
