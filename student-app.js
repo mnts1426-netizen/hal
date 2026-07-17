@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // 1. المتغيرات والبيانات الأساسية (نفس خطة المنهج الموجودة في الإدارة)
   const PROGRAM_START_DATE = new Date("2026-07-19");
   const PROGRAM_DATES = [
     "الأحد 19 يوليو (5 صفر)",
@@ -258,14 +257,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return `مقرر ${getDateLabel(dayIndex)}`;
   }
 
-  // 2. التحكم في الشاشات والتسجيل
   const loginScreen = document.getElementById("student-login-screen");
   const dashboardScreen = document.getElementById("student-dashboard");
   const loader = document.getElementById("global-loader");
 
   let currentStudent = null;
 
-  // التحقق من وجود جلسة سابقة للطالب
   setTimeout(() => {
     loader.style.opacity = "0";
     setTimeout(() => {
@@ -273,6 +270,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const sessionStr = localStorage.getItem("wathbah_student_session");
       if (sessionStr) {
         currentStudent = JSON.parse(sessionStr);
+        if (!currentStudent.progress)
+          currentStudent.progress = { mem: [], cons: [], rev: [] };
         loadStudentDashboard();
       } else {
         loginScreen.style.display = "flex";
@@ -280,12 +279,40 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 500);
   }, 800);
 
-  // عملية تسجيل الدخول
+  // تفعيل الإشعارات لجهاز الطالب وتسجيل الـ Token
+  async function requestFCMToken(userObj) {
+    if (
+      typeof firebase !== "undefined" &&
+      firebase.messaging &&
+      firebase.messaging.isSupported()
+    ) {
+      try {
+        const messaging = firebase.messaging();
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          // استبدل YOUR_PUBLIC_VAPID_KEY_HERE بمفتاحك الحقيقي لاحقاً
+          const token = await messaging.getToken({
+            vapidKey: "YOUR_PUBLIC_VAPID_KEY_HERE",
+          });
+          if (token && userObj.fcmToken !== token) {
+            userObj.fcmToken = token;
+            await dbFirestore
+              .collection("students")
+              .doc(userObj.id)
+              .update({ fcmToken: token });
+          }
+        }
+      } catch (error) {
+        console.log("تعذر تفعيل الإشعارات لهذا الجهاز:", error);
+      }
+    }
+  }
+
   document
     .getElementById("student-login-form")
     .addEventListener("submit", async (e) => {
       e.preventDefault();
-      const idNum = document.getElementById("login-id-number").value.trim();
+      const loginId = document.getElementById("login-id-number").value.trim();
       const pin = document.getElementById("login-pin").value.trim();
       const btn = document.getElementById("btn-submit");
 
@@ -298,14 +325,22 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.disabled = true;
 
       try {
-        // البحث عن الطالب في قاعدة البيانات برقم الهوية
-        const snapshot = await dbFirestore
+        // البحث بالهوية أولاً
+        let snapshot = await dbFirestore
           .collection("students")
-          .where("idNumber", "==", idNum)
+          .where("idNumber", "==", loginId)
           .get();
 
+        // إذا لم يجده بالهوية، يبحث برقم الجوال
         if (snapshot.empty) {
-          alert("رقم الهوية غير مسجل في النظام.");
+          snapshot = await dbFirestore
+            .collection("students")
+            .where("phone", "==", loginId)
+            .get();
+        }
+
+        if (snapshot.empty) {
+          alert("الرقم المدخل غير مسجل في النظام.");
           btn.innerHTML = "تسجيل الدخول";
           btn.disabled = false;
           return;
@@ -323,12 +358,21 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        // الدخول ناجح
+        if (!studentData.progress)
+          studentData.progress = { mem: [], cons: [], rev: [] };
+        if (!studentData.manualProgress)
+          studentData.manualProgress = { mem: "", cons: "", rev: "" };
+        if (!studentData.detailedProgress)
+          studentData.detailedProgress = { mem: [], cons: [], rev: [] };
+
         currentStudent = studentData;
         localStorage.setItem(
           "wathbah_student_session",
           JSON.stringify(currentStudent),
         );
+
+        // طلب صلاحية الإشعارات بعد تسجيل الدخول بنجاح
+        requestFCMToken(currentStudent);
 
         loginScreen.style.display = "none";
         loadStudentDashboard();
@@ -341,7 +385,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-  // تسجيل الخروج
   document.getElementById("btn-logout").addEventListener("click", () => {
     localStorage.removeItem("wathbah_student_session");
     currentStudent = null;
@@ -350,13 +393,11 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("login-pin").value = "";
   });
 
-  // 3. بناء لوحة تحكم الطالب (Dashboard)
   async function loadStudentDashboard() {
     dashboardScreen.style.display = "block";
 
-    // وضع البيانات الأساسية
     document.getElementById("st-name").textContent =
-      `أهلاً بك، ${currentStudent.name.split(" ")[0]}`; // عرض الاسم الأول
+      `أهلاً بك، ${currentStudent.name.split(" ")[0]}`;
 
     const trackInfo = tracksDefinition.find(
       (t) => t.id === currentStudent.trackId,
@@ -366,7 +407,6 @@ document.addEventListener("DOMContentLoaded", () => {
       : "المسار غير محدد";
 
     try {
-      // جلب اسم الحلقة
       let circleName = "لم يتم التوزيع بعد";
       if (currentStudent.circleId) {
         const circleDoc = await dbFirestore
@@ -377,14 +417,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       document.getElementById("st-circle").textContent = circleName;
 
-      // جلب سجلات الحضور الخاصة به فقط
       const recordsSnap = await dbFirestore
         .collection("dailyRecords")
         .where("studentId", "==", currentStudent.id)
         .get();
       const records = recordsSnap.docs.map((doc) => doc.data());
 
-      // حساب نسبة الحضور
       const currentDay = getCurrentProgramDay();
       const presentRecords = records.filter(
         (r) => r.attendance === "present" || r.attendance === "late",
@@ -395,7 +433,6 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("st-attendance-rate").textContent =
         attendancePercent + "%";
 
-      // تلوين الحضور
       const attRateEl = document.getElementById("st-attendance-rate");
       attRateEl.style.color =
         attendancePercent >= 80
@@ -404,20 +441,20 @@ document.addEventListener("DOMContentLoaded", () => {
             ? "#b45309"
             : "#991b1b";
 
-      // حساب نسبة إنجاز المنهج الكلي
       const trackDays = trackInfo ? trackInfo.totalDays : 23;
       const totalTasks = trackDays * 3;
+
       const completedTasks =
-        (currentStudent.progress.mem?.length || 0) +
-        (currentStudent.progress.cons?.length || 0) +
-        (currentStudent.progress.rev?.length || 0);
+        (currentStudent.progress?.mem?.length || 0) +
+        (currentStudent.progress?.cons?.length || 0) +
+        (currentStudent.progress?.rev?.length || 0);
+
       let progressPercent =
         totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       if (progressPercent > 100) progressPercent = 100;
       document.getElementById("st-progress-rate").textContent =
         progressPercent + "%";
 
-      // عرض مقرر اليوم
       document.getElementById("st-today-label").textContent =
         getDateLabel(currentDay);
       document.getElementById("st-task-mem").textContent = getTaskText(
@@ -436,7 +473,6 @@ document.addEventListener("DOMContentLoaded", () => {
         currentDay,
       );
 
-      // حالة اليوم
       const todayIso = new Date().toISOString().split("T")[0];
       const todayRecord = records.find((r) => r.date === todayIso);
 
@@ -450,7 +486,11 @@ document.addEventListener("DOMContentLoaded", () => {
           text = "✨ حضرت الحلقة وتم تسجيل إنجازك اليوم، بارك الله فيك!";
         else if (todayRecord.attendance === "late")
           text = "⏳ حضرت متأخراً وتم تسجيل إنجازك، احرص على التبكير غداً!";
-        else if (todayRecord.attendance === "absent") {
+        else if (todayRecord.attendance === "excused") {
+          text = "📩 تم قبول استئذانك وتم تسجيلك (مستأذن) اليوم.";
+          statusCard.style.borderTop = "4px solid #0369a1";
+          statusDiv.style.color = "#0369a1";
+        } else if (todayRecord.attendance === "absent") {
           text = "⭕ تم تسجيلك (غائب) اليوم.";
           statusCard.style.borderTop = "4px solid #991b1b";
           statusDiv.style.color = "#991b1b";
@@ -467,7 +507,46 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // 4. تغيير الرقم السري للطالب
+  // --- إرسال رسالة من حساب الطالب إلى السحابة ---
+  const msgForm = document.getElementById("student-message-form");
+  if (msgForm) {
+    msgForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const target = document.getElementById("msg-target").value;
+      const subject = document.getElementById("msg-subject").value;
+      const text = document.getElementById("msg-text").value;
+      const btn = e.target.querySelector("button");
+
+      btn.innerHTML = "جاري الإرسال...";
+      btn.disabled = true;
+
+      const newMsg = {
+        id: "msg_" + Date.now(),
+        senderId: currentStudent.id,
+        senderName: currentStudent.name,
+        senderRole: "student",
+        receiverType: target,
+        circleId: currentStudent.circleId || "",
+        subject: subject,
+        text: text,
+        timestamp: Date.now(),
+        date: new Date().toLocaleString("ar-SA"),
+      };
+
+      try {
+        await dbFirestore.collection("messages").doc(newMsg.id).set(newMsg);
+        alert("تم إرسال رسالتك بنجاح! 📬");
+        msgForm.reset();
+      } catch (err) {
+        console.error(err);
+        alert("فشل الإرسال، الرجاء التأكد من الاتصال بالإنترنت.");
+      } finally {
+        btn.innerHTML = "إرسال الرسالة 🚀";
+        btn.disabled = false;
+      }
+    });
+  }
+
   document
     .getElementById("student-password-form")
     .addEventListener("submit", async (e) => {
@@ -480,17 +559,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       try {
-        await dbFirestore.collection("students").doc(currentStudent.id).update({
-          pin: newPin,
-        });
-
-        // تحديث الجلسة المحلية
+        await dbFirestore
+          .collection("students")
+          .doc(currentStudent.id)
+          .update({ pin: newPin });
         currentStudent.pin = newPin;
         localStorage.setItem(
           "wathbah_student_session",
           JSON.stringify(currentStudent),
         );
-
         alert("تم تحديث الرقم السري الخاص بك بنجاح!");
         document.getElementById("st-new-pin").value = "";
       } catch (error) {
