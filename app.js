@@ -336,16 +336,62 @@ document.addEventListener("DOMContentLoaded", () => {
     return nums ? Math.max(...nums.map(Number)) : 0;
   }
 
-  // المزامنة السحابية
+  // ==========================================
+  // النظام السحابي الجديد: دقيق وموجه لكل مستند
+  // ==========================================
+
+  function saveLocalDB() {
+    localStorage.setItem("wathbah_db", JSON.stringify(window.db));
+  }
+
+  async function syncToFirestore(collectionName, docId, data) {
+    if (typeof dbFirestore !== "undefined" && navigator.onLine) {
+      try {
+        await dbFirestore.collection(collectionName).doc(docId).set(data);
+      } catch (e) {
+        console.warn("سيتم المزامنة عند استقرار الاتصال.");
+      }
+    }
+  }
+
+  async function deleteFromFirestore(collectionName, docId) {
+    if (typeof dbFirestore !== "undefined" && navigator.onLine) {
+      try {
+        await dbFirestore.collection(collectionName).doc(docId).delete();
+      } catch (e) {
+        console.warn("فشل الحذف من السحابة مؤقتاً.");
+      }
+    }
+  }
+
+  // ==========================================
+
   async function initDB() {
     try {
       const studentsSnap = await dbFirestore.collection("students").get();
       const circlesSnap = await dbFirestore.collection("groups").get();
       const usersSnap = await dbFirestore.collection("users").get();
       const recordsSnap = await dbFirestore.collection("dailyRecords").get();
-      const logsSnap = await dbFirestore.collection("auditLogs").get();
+      const logsSnap = await dbFirestore
+        .collection("auditLogs")
+        .orderBy("timestamp", "desc")
+        .limit(50)
+        .get(); // جلب آخر 50 عملية فقط
 
-      let loadedStudents = studentsSnap.docs.map((doc) => doc.data());
+      // التنظيف الآمن للبيانات القديمة (Data Normalization)
+      let loadedStudents = studentsSnap.docs.map((doc) => {
+        let s = doc.data();
+        if (!s.progress) s.progress = { mem: [], cons: [], rev: [] };
+        if (!s.manualProgress)
+          s.manualProgress = { mem: "", cons: "", rev: "" };
+        if (!s.detailedProgress)
+          s.detailedProgress = { mem: [], cons: [], rev: [] };
+        if (!s.trackId) s.trackId = "";
+        if (!s.circleId) s.circleId = "";
+        if (!s.level) s.level = "غير محدد";
+        return s;
+      });
+
       let loadedCircles = circlesSnap.docs.map((doc) => doc.data());
       let loadedRecords = recordsSnap.docs.map((doc) => doc.data());
       let loadedLogs = logsSnap.docs.map((doc) => doc.data());
@@ -353,17 +399,19 @@ document.addEventListener("DOMContentLoaded", () => {
       let loadedUsers = { admin: [], supervisor: [], teacher: [] };
       usersSnap.docs.forEach((doc) => {
         let u = doc.data();
-        if (loadedUsers[u.role]) loadedUsers[u.role].push(u);
+        if (u.role && loadedUsers[u.role]) loadedUsers[u.role].push(u);
       });
 
+      let isFirstSeed = false;
       if (loadedUsers.admin.length === 0) {
-        loadedUsers = {
-          admin: [{ id: "a1", name: "أ. عبدالله", role: "admin", pin: "0000" }],
-          supervisor: [],
-          teacher: [],
+        const defaultAdmin = {
+          id: "a1",
+          name: "أ. عبدالله",
+          role: "admin",
+          pin: "0000",
         };
-        loadedCircles = [];
-        loadedStudents = [];
+        loadedUsers.admin.push(defaultAdmin);
+        isFirstSeed = true;
       }
 
       window.db = {
@@ -376,8 +424,12 @@ document.addEventListener("DOMContentLoaded", () => {
         auditLogs: loadedLogs,
       };
 
-      localStorage.setItem("wathbah_db", JSON.stringify(window.db));
-      if (loadedUsers.admin.length === 0) saveDB();
+      saveLocalDB();
+
+      // التأسيس الأولي فقط يكتب للسحابة لمرة واحدة في عمر النظام
+      if (isFirstSeed) {
+        syncToFirestore("users", "a1", window.db.users.admin[0]);
+      }
     } catch (e) {
       console.warn("استخدام النسخة المحلية للبيانات بسبب انقطاع الاتصال.", e);
       const stored = localStorage.getItem("wathbah_db");
@@ -405,42 +457,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function saveDB() {
-    localStorage.setItem("wathbah_db", JSON.stringify(window.db));
-    try {
-      if (typeof dbFirestore !== "undefined") {
-        window.db.students.forEach((s) =>
-          dbFirestore.collection("students").doc(s.id).set(s),
-        );
-        window.db.circles.forEach((c) =>
-          dbFirestore.collection("groups").doc(c.id).set(c),
-        );
-        Object.values(window.db.users)
-          .flat()
-          .forEach((u) => dbFirestore.collection("users").doc(u.id).set(u));
-        window.db.dailyRecords.forEach((r) =>
-          dbFirestore
-            .collection("dailyRecords")
-            .doc(r.studentId + "_" + r.date)
-            .set(r),
-        );
-        window.db.auditLogs.slice(0, 50).forEach((l, idx) =>
-          dbFirestore
-            .collection("auditLogs")
-            .doc("log_" + idx)
-            .set(l),
-        );
-      }
-    } catch (err) {
-      console.warn("سيتم الرفع عند عودة الإنترنت.");
-    }
-  }
-
   let currentUser = null;
   let isGlobalManualMode = false;
 
   function addLog(actionDesc, targetCircle) {
-    window.db.auditLogs.unshift({
+    const timestamp = Date.now();
+    const logId = "log_" + timestamp;
+    const newLog = {
+      id: logId,
       time: new Date().toLocaleString("ar-SA"),
       user: currentUser ? currentUser.name : "نظام",
       role: currentUser
@@ -452,8 +476,19 @@ document.addEventListener("DOMContentLoaded", () => {
         : "-",
       action: actionDesc,
       circle: targetCircle || "عام",
-    });
-    saveDB();
+      timestamp: timestamp,
+    };
+
+    window.db.auditLogs.unshift(newLog);
+    saveLocalDB();
+    syncToFirestore("auditLogs", logId, newLog); // يكتب مستند واحد فقط للعملية
+
+    // إزالة أقدم عملية إذا تجاوزنا 50 (تنظيف السحابة)
+    if (window.db.auditLogs.length > 50) {
+      const oldLog = window.db.auditLogs.pop();
+      if (oldLog.id) deleteFromFirestore("auditLogs", oldLog.id);
+    }
+
     renderLogs();
   }
 
@@ -492,7 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  function doLogin(user) {
+  function doLogin(user, isAutoSession = false) {
     currentUser = user;
     localStorage.setItem(
       "wathbah_session",
@@ -541,6 +576,11 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("admin-record-date").value = todayIso;
 
     refreshAllViews();
+
+    // منع تكرار كتابة التسجيل في السحابة إذا كان دخولاً تلقائياً
+    if (!isAutoSession) {
+      addLog("تسجيل الدخول للنظام", "عام");
+    }
   }
 
   setTimeout(async () => {
@@ -551,7 +591,7 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         loader.style.display = "none";
         const sessionUser = checkSession();
-        if (sessionUser) doLogin(sessionUser);
+        if (sessionUser) doLogin(sessionUser, true);
         else loginScreen.style.display = "flex";
       }, 500);
     }
@@ -595,11 +635,10 @@ document.addEventListener("DOMContentLoaded", () => {
       submitBtn.innerHTML = "جاري التحقق...";
       submitBtn.disabled = true;
       setTimeout(() => {
-        doLogin(user);
+        doLogin(user, false);
         submitBtn.innerHTML = "دخول";
         submitBtn.disabled = false;
         loginPasswordInput.value = "";
-        addLog("تسجيل الدخول للنظام", "عام");
       }, 400);
     });
 
@@ -716,14 +755,14 @@ document.addEventListener("DOMContentLoaded", () => {
         ? Math.round((attendanceCount / students.length) * 100)
         : 0;
     const targetDay = getCurrentProgramDay();
-    const totalProgress = students.reduce(
-      (acc, s) =>
-        acc +
-        (s.progress.mem.length +
-          s.progress.cons.length +
-          s.progress.rev.length),
-      0,
-    );
+
+    const totalProgress = students.reduce((acc, s) => {
+      const mLen = s.progress?.mem?.length || 0;
+      const cLen = s.progress?.cons?.length || 0;
+      const rLen = s.progress?.rev?.length || 0;
+      return acc + mLen + cLen + rLen;
+    }, 0);
+
     let avgProgress =
       students.length > 0 && targetDay > 0
         ? Math.round((totalProgress / (targetDay * 3 * students.length)) * 100)
@@ -775,7 +814,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
 
-    // التحديث الجذري هنا: جعل الحلقة اختيارية وإظهار التفاصيل بدقة
     const stuCircleSelect = document.getElementById("stu-circle");
     if (stuCircleSelect) {
       const currentVal = stuCircleSelect.value;
@@ -841,7 +879,7 @@ document.addEventListener("DOMContentLoaded", () => {
         rev: "",
       }));
       e.target.reset();
-      saveDB();
+      saveLocalDB();
       refreshAllViews();
       alert("تم حفظ المسار!");
       addLog(`إنشاء مسار جديد: ${trackName}`, "عام");
@@ -856,7 +894,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const sTrackId = document.getElementById("stu-track").value;
       const selectedCircleId = document.getElementById("stu-circle").value;
 
-      window.db.students.push({
+      const newStudent = {
         id: "s" + Date.now(),
         name: sName,
         idNumber: document.getElementById("stu-id-number").value,
@@ -868,10 +906,12 @@ document.addEventListener("DOMContentLoaded", () => {
         progress: { mem: [], cons: [], rev: [] },
         manualProgress: { mem: "", cons: "", rev: "" },
         detailedProgress: { mem: [], cons: [], rev: [] },
-      });
+      };
 
+      window.db.students.push(newStudent);
       e.target.reset();
-      saveDB();
+      saveLocalDB();
+      syncToFirestore("students", newStudent.id, newStudent);
       refreshAllViews();
 
       let cName = "بدون حلقة (سيتم توزيعه لاحقاً)";
@@ -890,18 +930,42 @@ document.addEventListener("DOMContentLoaded", () => {
     addTeacherForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const tName = document.getElementById("teacher-name").value;
-      window.db.users.teacher.push({
+      const newTeacher = {
         id: "tech" + Date.now(),
         name: tName,
         pin: document.getElementById("teacher-pin").value,
         circleId: "",
         role: "teacher",
-      });
+      };
+      window.db.users.teacher.push(newTeacher);
       e.target.reset();
-      saveDB();
+      saveLocalDB();
+      syncToFirestore("users", newTeacher.id, newTeacher);
       refreshAllViews();
       alert("تم تسجيل المعلم!");
       addLog(`إضافة معلم جديد: ${tName}`, "عام");
+    });
+  }
+
+  const addSupervisorForm = document.getElementById("add-supervisor-form");
+  if (addSupervisorForm) {
+    addSupervisorForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const supName = document.getElementById("supervisor-name").value;
+      const newSup = {
+        id: "sup" + Date.now(),
+        name: supName,
+        phone: document.getElementById("supervisor-phone").value,
+        pin: document.getElementById("supervisor-pin").value,
+        role: "supervisor",
+      };
+      window.db.users.supervisor.push(newSup);
+      e.target.reset();
+      saveLocalDB();
+      syncToFirestore("users", newSup.id, newSup);
+      refreshAllViews();
+      alert("تم تسجيل المشرف!");
+      addLog(`إضافة مشرف جديد: ${supName}`, "عام");
     });
   }
 
@@ -930,7 +994,6 @@ document.addEventListener("DOMContentLoaded", () => {
           ? "all"
           : document.getElementById("new-circle-track").value;
 
-      // التنبيه الذكي لمنع حفظ الحلقة بدون مسار
       if (cType === "specific" && !trackId) {
         alert(
           "⚠️ الرجاء اختيار المسار المخصص لهذه الحلقة قبل الحفظ لكي يتعرف عليها النظام.",
@@ -939,19 +1002,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const teacherId = document.getElementById("new-circle-teacher").value;
-      window.db.circles.push({
+      const newCircle = {
         id: circleId,
         name: circleName,
         teacherId: teacherId,
         trackId: trackId,
-      });
+      };
+      window.db.circles.push(newCircle);
 
       const teacher = window.db.users.teacher.find((t) => t.id === teacherId);
-      if (teacher) teacher.circleId = circleId;
+      if (teacher) {
+        teacher.circleId = circleId;
+        syncToFirestore("users", teacher.id, teacher);
+      }
 
       e.target.reset();
       trackContainer.style.display = "block";
-      saveDB();
+      saveLocalDB();
+      syncToFirestore("groups", circleId, newCircle);
       refreshAllViews();
       alert("تم تأسيس الحلقة بنجاح!");
       addLog(`تأسيس حلقة جديدة`, circleName);
@@ -1002,11 +1070,18 @@ document.addEventListener("DOMContentLoaded", () => {
       checkboxes.forEach((chk) => {
         const student = window.db.students.find((s) => s.id === chk.value);
         if (student) {
-          if (chk.checked) student.circleId = circleId;
-          else if (student.circleId === circleId) student.circleId = "";
+          let hasChanged = false;
+          if (chk.checked && student.circleId !== circleId) {
+            student.circleId = circleId;
+            hasChanged = true;
+          } else if (!chk.checked && student.circleId === circleId) {
+            student.circleId = "";
+            hasChanged = true;
+          }
+          if (hasChanged) syncToFirestore("students", student.id, student);
         }
       });
-      saveDB();
+      saveLocalDB();
       refreshAllViews();
       alert("تم حفظ قائمة طلاب الحلقة!");
       addLog(`تحديث قائمة طلاب الحلقة`, c ? c.name : "");
@@ -1030,7 +1105,10 @@ document.addEventListener("DOMContentLoaded", () => {
         (s) => s.circleId === c.id,
       ).length;
       tbody.innerHTML += `<tr><td>${i + 1}</td><td style="font-weight:700;">${c.name}</td><td><span class="badge" style="background:#f1f5f9; color:var(--primary-blue);">${trackName}</span></td><td>${teacher.name}</td><td style="color:var(--primary-blue); font-weight:bold;">${studentCount} طلاب</td>
-      <td><button class="btn-action" onclick="openEditModal('circle', '${c.id}')">تعديل الحلقة</button></td></tr>`;
+      <td>
+        <button class="btn-action" onclick="openEditModal('circle', '${c.id}')">تعديل</button>
+        <button class="btn-action" style="background:var(--danger-btn); color:white; border-color:var(--danger-btn); margin-right:5px;" onclick="deleteCircle('${c.id}')">حذف</button>
+      </td></tr>`;
     });
   }
 
@@ -1045,7 +1123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  window.deleteStudent = function (studentId) {
+  window.deleteStudent = async function (studentId) {
     if (
       confirm(
         "⚠️ تحذير: هل أنت متأكد من رغبتك في حذف هذا الطالب نهائياً من النظام؟ لا يمكن التراجع عن هذا الإجراء.",
@@ -1053,14 +1131,73 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
       const student = window.db.students.find((s) => s.id === studentId);
       window.db.students = window.db.students.filter((s) => s.id !== studentId);
-      window.db.dailyRecords = window.db.dailyRecords.filter(
-        (r) => r.studentId !== studentId,
-      );
 
-      saveDB();
+      // إزالة ومسح سجلاته اليومية فوراً
+      window.db.dailyRecords = window.db.dailyRecords.filter((r) => {
+        if (r.studentId === studentId) {
+          deleteFromFirestore("dailyRecords", r.studentId + "_" + r.date);
+          return false;
+        }
+        return true;
+      });
+
+      deleteFromFirestore("students", studentId);
+      saveLocalDB();
       refreshAllViews();
       alert("تم حذف الطالب بنجاح.");
       addLog(`حذف الطالب: ${student ? student.name : "غير معروف"}`, "عام");
+    }
+  };
+
+  window.deleteCircle = async function (circleId) {
+    if (
+      confirm(
+        "⚠️ هل أنت متأكد من حذف هذه الحلقة؟ (لن يتم حذف الطلاب، بل سيصبحون بدون حلقة متصلة).",
+      )
+    ) {
+      const circle = window.db.circles.find((c) => c.id === circleId);
+      window.db.circles = window.db.circles.filter((c) => c.id !== circleId);
+
+      window.db.users.teacher.forEach((t) => {
+        if (t.circleId === circleId) {
+          t.circleId = "";
+          syncToFirestore("users", t.id, t);
+        }
+      });
+      window.db.students.forEach((s) => {
+        if (s.circleId === circleId) {
+          s.circleId = "";
+          syncToFirestore("students", s.id, s);
+        }
+      });
+
+      deleteFromFirestore("groups", circleId);
+      saveLocalDB();
+      refreshAllViews();
+      alert("تم حذف الحلقة بنجاح.");
+      addLog(`حذف الحلقة: ${circle ? circle.name : "غير معروف"}`, "عام");
+    }
+  };
+
+  window.deleteTeacher = async function (teacherId) {
+    if (confirm("⚠️ هل أنت متأكد من حذف هذا المعلم؟")) {
+      const teacher = window.db.users.teacher.find((t) => t.id === teacherId);
+      window.db.users.teacher = window.db.users.teacher.filter(
+        (t) => t.id !== teacherId,
+      );
+
+      window.db.circles.forEach((c) => {
+        if (c.teacherId === teacherId) {
+          c.teacherId = "";
+          syncToFirestore("groups", c.id, c);
+        }
+      });
+
+      deleteFromFirestore("users", teacherId);
+      saveLocalDB();
+      refreshAllViews();
+      alert("تم حذف المعلم بنجاح.");
+      addLog(`حذف المعلم: ${teacher ? teacher.name : "غير معروف"}`, "عام");
     }
   };
 
@@ -1068,9 +1205,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = document.getElementById("students-list-body");
     if (!tbody) return;
     tbody.innerHTML = "";
-
     let displayStudents = window.db.students;
-
     displayStudents.forEach((s) => {
       const track = window.db.tracks.find((t) => t.id === s.trackId) || {
         name: "غير محدد",
@@ -1104,7 +1239,10 @@ document.addEventListener("DOMContentLoaded", () => {
         name: "غير مكلف",
       };
       tbody.innerHTML += `<tr><td style="font-weight:700;">${t.name}</td><td style="letter-spacing: 2px;">${t.pin}</td><td style="color:${circle.name === "غير مكلف" ? "var(--danger-btn)" : "inherit"}">${circle.name}</td>
-      <td><button class="btn-action" onclick="openEditModal('teacher', '${t.id}')">تعديل</button></td></tr>`;
+      <td>
+        <button class="btn-action" onclick="openEditModal('teacher', '${t.id}')">تعديل</button>
+        <button class="btn-action" style="background:var(--danger-btn); color:white; border-color:var(--danger-btn); margin-right:5px;" onclick="deleteTeacher('${t.id}')">حذف</button>
+      </td></tr>`;
     });
   }
 
@@ -1117,6 +1255,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (type === "student") {
       const s = window.db.students.find((x) => x.id === id);
+      if (!s)
+        return alert(
+          "خطأ: لم يتم العثور على بيانات الطالب. يرجى تحديث الصفحة.",
+        );
       document.getElementById("edit-modal-title").textContent =
         "تعديل بيانات الطالب";
       let trackOpts = "";
@@ -1142,6 +1284,7 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     } else if (type === "teacher") {
       const t = window.db.users.teacher.find((x) => x.id === id);
+      if (!t) return alert("خطأ: لم يتم العثور على بيانات المعلم.");
       document.getElementById("edit-modal-title").textContent =
         "تعديل بيانات المعلم";
       let cOpts = "<option value=''>غير مكلف بأي حلقة</option>";
@@ -1161,6 +1304,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fields.innerHTML = `<div class="input-group"><label>اسم المسار</label><input type="text" id="edit-track-name" class="modern-input" value="${t.name}" required></div>`;
     } else if (type === "circle") {
       const c = window.db.circles.find((x) => x.id === id);
+      if (!c) return alert("خطأ: لم يتم العثور على بيانات الحلقة.");
       document.getElementById("edit-modal-title").textContent =
         "تعديل بيانات الحلقة";
       let teacherOpts = "<option value=''>بدون معلم</option>";
@@ -1227,6 +1371,7 @@ document.addEventListener("DOMContentLoaded", () => {
         s.pin = document.getElementById("edit-stu-pin").value;
         s.trackId = document.getElementById("edit-stu-track").value;
         s.circleId = document.getElementById("edit-stu-circle").value;
+        syncToFirestore("students", s.id, s);
         addLog(`تعديل بيانات الطالب: ${s.name}`, "عام");
       }
     } else if (editingContext.type === "teacher") {
@@ -1240,7 +1385,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (t.circleId !== newCircleId) {
           if (t.circleId) {
             const oldC = window.db.circles.find((c) => c.id === t.circleId);
-            if (oldC) oldC.teacherId = "";
+            if (oldC) {
+              oldC.teacherId = "";
+              syncToFirestore("groups", oldC.id, oldC);
+            }
           }
           t.circleId = newCircleId;
           if (newCircleId) {
@@ -1250,12 +1398,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 const oldT = window.db.users.teacher.find(
                   (x) => x.id === newC.teacherId,
                 );
-                if (oldT) oldT.circleId = "";
+                if (oldT) {
+                  oldT.circleId = "";
+                  syncToFirestore("users", oldT.id, oldT);
+                }
               }
               newC.teacherId = t.id;
+              syncToFirestore("groups", newC.id, newC);
             }
           }
         }
+        syncToFirestore("users", t.id, t);
         addLog(`تعديل بيانات المعلم: ${t.name}`, "عام");
       }
     } else if (editingContext.type === "track") {
@@ -1282,17 +1435,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const oldTeacher = window.db.users.teacher.find(
           (t) => t.id === c.teacherId,
         );
-        if (oldTeacher) oldTeacher.circleId = "";
+        if (oldTeacher) {
+          oldTeacher.circleId = "";
+          syncToFirestore("users", oldTeacher.id, oldTeacher);
+        }
         c.teacherId = newTeacherId;
         const newTeacher = window.db.users.teacher.find(
           (t) => t.id === newTeacherId,
         );
-        if (newTeacher) newTeacher.circleId = c.id;
+        if (newTeacher) {
+          newTeacher.circleId = c.id;
+          syncToFirestore("users", newTeacher.id, newTeacher);
+        }
+
+        syncToFirestore("groups", c.id, c);
         addLog(`تعديل مسار ومعلم الحلقة`, c.name);
       }
     }
     closeEditModal();
-    saveDB();
+    saveLocalDB();
     refreshAllViews();
     alert("تم حفظ التعديلات!");
   });
@@ -1301,6 +1462,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.openScheduleModal = function (trackId) {
     editingScheduleTrackId = trackId;
     const track = window.db.tracks.find((t) => t.id === trackId);
+    if (!track) return;
     document.getElementById("schedule-modal-title").textContent =
       `تعديل مقررات: ${track.name}`;
     const tbody = document.getElementById("schedule-modal-tbody");
@@ -1338,7 +1500,7 @@ document.addEventListener("DOMContentLoaded", () => {
         addLog(`تعديل مقررات المسار`, t ? t.name : "عام");
       }
       closeScheduleModal();
-      saveDB();
+      saveLocalDB();
       refreshAllViews();
       alert("تم تحديث المقررات! وستظهر للمعلمين فوراً.");
     });
@@ -1387,9 +1549,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const totalTasks = track.totalDays * 3;
       const completedTasks =
-        student.progress.mem.length +
-        student.progress.cons.length +
-        student.progress.rev.length;
+        (student.progress?.mem?.length || 0) +
+        (student.progress?.cons?.length || 0) +
+        (student.progress?.rev?.length || 0);
       let progressPercent =
         totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       if (progressPercent > 100) progressPercent = 100;
@@ -1427,22 +1589,33 @@ document.addEventListener("DOMContentLoaded", () => {
     let existingRecordIndex = window.db.dailyRecords.findIndex(
       (r) => r.studentId === studentId && r.date === selectedDate,
     );
-    if (existingRecordIndex > -1)
+    if (existingRecordIndex > -1) {
       window.db.dailyRecords[existingRecordIndex].attendance = status;
-    else {
-      window.db.dailyRecords.push({
+      syncToFirestore(
+        "dailyRecords",
+        studentId + "_" + selectedDate,
+        window.db.dailyRecords[existingRecordIndex],
+      );
+    } else {
+      const newRecord = {
         studentId,
         date: selectedDate,
         attendance: status,
         notes: "تعديل حضور إداري",
         timestamp: Date.now(),
-      });
-      saveDB();
+      };
+      window.db.dailyRecords.push(newRecord);
+      syncToFirestore(
+        "dailyRecords",
+        studentId + "_" + selectedDate,
+        newRecord,
+      );
     }
     const student = window.db.students.find((s) => s.id === studentId);
     const circle = window.db.circles.find(
       (c) => c.id === (student ? student.circleId : ""),
     );
+    saveLocalDB();
     addLog(
       `تعديل حضور الطالب (${student ? student.name : ""}) ليوم ${selectedDate}`,
       circle ? circle.name : "",
@@ -1500,14 +1673,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       const manualStr = student.manualProgress
-        ? ` (ح:${student.manualProgress.mem || 0}, ث:${student.manualProgress.cons || 0}, م:${student.manualProgress.rev || 0})`
+        ? ` (ح:${student.manualProgress?.mem || 0}, ث:${student.manualProgress?.cons || 0}, م:${student.manualProgress?.rev || 0})`
         : "";
       const timeStr =
         record && record.sessionTime && record.sessionTime !== "غير محدد"
           ? ` | وقت: ${record.sessionTime}`
           : "";
       const tasksCompleted = record
-        ? `أيام المنهج: ${student.progress.mem.length}/${student.progress.cons.length}/${student.progress.rev.length}${manualStr}${timeStr}`
+        ? `أيام المنهج: ${student.progress?.mem?.length || 0}/${student.progress?.cons?.length || 0}/${student.progress?.rev?.length || 0}${manualStr}${timeStr}`
         : "لا يوجد إنجاز جديد";
       const notesStr = record && record.notes ? record.notes : "-";
       tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td>${notesStr}</td></tr>`;
@@ -1608,6 +1781,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const currentProgramDay = getCurrentProgramDay();
     filteredStudents.forEach((student) => {
+      if (!student.progress) student.progress = { mem: [], cons: [], rev: [] };
       if (!student.manualProgress)
         student.manualProgress = { mem: "", cons: "", rev: "" };
       if (!student.detailedProgress)
@@ -1630,7 +1804,9 @@ document.addEventListener("DOMContentLoaded", () => {
         track && track.totalHadiths ? track.totalHadiths : 150;
 
       let maxMem =
-        student.progress.mem.length > 0 ? Math.max(...student.progress.mem) : 0;
+        student.progress?.mem?.length > 0
+          ? Math.max(...student.progress.mem)
+          : 0;
       let delayDays = currentProgramDay - maxMem;
       let progressBadge = "";
       if (delayDays <= 0)
@@ -1650,11 +1826,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const memText = getTaskText(student.trackId, "mem", i);
         const consText = getTaskText(student.trackId, "cons", i);
         const revText = getTaskText(student.trackId, "rev", i);
-        const isMemChecked = student.progress.mem.includes(i) ? "checked" : "";
-        const isConsChecked = student.progress.cons.includes(i)
+        const isMemChecked = student.progress?.mem?.includes(i)
           ? "checked"
           : "";
-        const isRevChecked = student.progress.rev.includes(i) ? "checked" : "";
+        const isConsChecked = student.progress?.cons?.includes(i)
+          ? "checked"
+          : "";
+        const isRevChecked = student.progress?.rev?.includes(i)
+          ? "checked"
+          : "";
         let dayClass = "day-column";
         if (i < currentProgramDay) dayClass += " day-past";
         else if (i === currentProgramDay) dayClass += " day-current";
@@ -1674,13 +1854,15 @@ document.addEventListener("DOMContentLoaded", () => {
       let dropdownHTML = `<details class="dropdown-details"><summary>🔽 عرض تفصيل الأحاديث (تحديد / إلغاء الأحاديث بدقة)</summary><div class="dropdown-content">`;
       let memGrid = `<div class="hadith-grid-container"><h5>📖 أحاديث الحفظ:</h5><div class="hadith-grid">`;
       for (let h = 1; h <= totalHadiths; h++) {
-        let checked = student.detailedProgress.mem.includes(h) ? "checked" : "";
+        let checked = student.detailedProgress?.mem?.includes(h)
+          ? "checked"
+          : "";
         memGrid += `<label class="h-item"><input type="checkbox" name="det_mem_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
       }
       memGrid += `</div></div>`;
       let consGrid = `<div class="hadith-grid-container"><h5>🔄 أحاديث التثبيت:</h5><div class="hadith-grid">`;
       for (let h = 1; h <= totalHadiths; h++) {
-        let checked = student.detailedProgress.cons.includes(h)
+        let checked = student.detailedProgress?.cons?.includes(h)
           ? "checked"
           : "";
         consGrid += `<label class="h-item"><input type="checkbox" name="det_cons_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
@@ -1688,7 +1870,9 @@ document.addEventListener("DOMContentLoaded", () => {
       consGrid += `</div></div>`;
       let revGrid = `<div class="hadith-grid-container"><h5>🔁 أحاديث المراجعة:</h5><div class="hadith-grid">`;
       for (let h = 1; h <= totalHadiths; h++) {
-        let checked = student.detailedProgress.rev.includes(h) ? "checked" : "";
+        let checked = student.detailedProgress?.rev?.includes(h)
+          ? "checked"
+          : "";
         revGrid += `<label class="h-item"><input type="checkbox" name="det_rev_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
       }
       revGrid += `</div></div>`;
@@ -1696,9 +1880,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let manualInputHTML = `
         <div class="manual-input-grid">
-          <div><label>أين وصل في الحفظ؟</label><input type="number" name="manual_mem" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress.mem}" ${disableStr}></div>
-          <div><label>أين وصل في التثبيت؟</label><input type="number" name="manual_cons" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress.cons}" ${disableStr}></div>
-          <div><label>أين وصل في المراجعة؟</label><input type="number" name="manual_rev" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress.rev}" ${disableStr}></div>
+          <div><label>أين وصل في الحفظ؟</label><input type="number" name="manual_mem" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress?.mem || ""}" ${disableStr}></div>
+          <div><label>أين وصل في التثبيت؟</label><input type="number" name="manual_cons" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress?.cons || ""}" ${disableStr}></div>
+          <div><label>أين وصل في المراجعة؟</label><input type="number" name="manual_rev" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress?.rev || ""}" ${disableStr}></div>
         </div>
       `;
 
@@ -1785,6 +1969,9 @@ document.addEventListener("DOMContentLoaded", () => {
             student.detailedProgress.cons = detCons;
             student.detailedProgress.rev = detRev;
 
+            // تحديث إنجاز الطالب في السحابة
+            syncToFirestore("students", student.id, student);
+
             let existingRecordIndex = window.db.dailyRecords.findIndex(
               (r) => r.studentId === student.id && r.date === today,
             );
@@ -1800,7 +1987,14 @@ document.addEventListener("DOMContentLoaded", () => {
               window.db.dailyRecords[existingRecordIndex] = newRecord;
             else window.db.dailyRecords.push(newRecord);
 
-            saveDB();
+            // تحديث سجل المتابعة في السحابة
+            syncToFirestore(
+              "dailyRecords",
+              student.id + "_" + today,
+              newRecord,
+            );
+
+            saveLocalDB();
             renderDailyTracking(searchInput.value.toLowerCase());
             updateDashboardStats();
             generateReport();
@@ -1821,9 +2015,10 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       if (userInDb) {
         userInDb.pin = newPin;
+        syncToFirestore("users", userInDb.id, userInDb);
         alert("تم تحديث الرقم السري بنجاح!");
         passForm.reset();
-        saveDB();
+        saveLocalDB();
       }
       addLog("تغيير الرقم السري", "عام");
     });
