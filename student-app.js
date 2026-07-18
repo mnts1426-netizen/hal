@@ -1,4 +1,26 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // --- أيقونات العين الرسمية ---
+  const eyeOpenSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
+  const eyeClosedSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`;
+
+  // --- تفعيل زر عرض/إخفاء الرقم السري ---
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".toggle-password-btn, .toggle-password");
+    if (btn) {
+      const container = btn.parentElement;
+      const input = container.querySelector("input");
+      if (input) {
+        if (input.type === "password") {
+          input.type = "text";
+          btn.innerHTML = eyeClosedSVG;
+        } else {
+          input.type = "password";
+          btn.innerHTML = eyeOpenSVG;
+        }
+      }
+    }
+  });
+
   const PROGRAM_START_DATE = new Date("2026-07-19");
   const PROGRAM_DATES = [
     "الأحد 19 يوليو (5 صفر)",
@@ -264,22 +286,23 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentStudent = null;
 
   setTimeout(() => {
-    loader.style.opacity = "0";
+    if (loader) loader.style.opacity = "0";
     setTimeout(() => {
-      loader.style.display = "none";
+      if (loader) loader.style.display = "none";
       const sessionStr = localStorage.getItem("wathbah_student_session");
       if (sessionStr) {
         currentStudent = JSON.parse(sessionStr);
         if (!currentStudent.progress)
           currentStudent.progress = { mem: [], cons: [], rev: [] };
+        if (!currentStudent.tasksTiming)
+          currentStudent.tasksTiming = { mem: {}, cons: {}, rev: {} };
         loadStudentDashboard();
       } else {
-        loginScreen.style.display = "flex";
+        if (loginScreen) loginScreen.style.display = "flex";
       }
     }, 500);
   }, 800);
 
-  // تفعيل الإشعارات لجهاز الطالب وتسجيل الـ Token
   async function requestFCMToken(userObj) {
     if (
       typeof firebase !== "undefined" &&
@@ -290,7 +313,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const messaging = firebase.messaging();
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
-          // استبدل YOUR_PUBLIC_VAPID_KEY_HERE بمفتاحك الحقيقي لاحقاً
           const token = await messaging.getToken({
             vapidKey: "YOUR_PUBLIC_VAPID_KEY_HERE",
           });
@@ -308,9 +330,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  document
-    .getElementById("student-login-form")
-    .addEventListener("submit", async (e) => {
+  const loginForm = document.getElementById("student-login-form");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const loginId = document.getElementById("login-id-number").value.trim();
       const pin = document.getElementById("login-pin").value.trim();
@@ -325,13 +347,11 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.disabled = true;
 
       try {
-        // البحث بالهوية أولاً
         let snapshot = await dbFirestore
           .collection("students")
           .where("idNumber", "==", loginId)
           .get();
 
-        // إذا لم يجده بالهوية، يبحث برقم الجوال
         if (snapshot.empty) {
           snapshot = await dbFirestore
             .collection("students")
@@ -364,6 +384,8 @@ document.addEventListener("DOMContentLoaded", () => {
           studentData.manualProgress = { mem: "", cons: "", rev: "" };
         if (!studentData.detailedProgress)
           studentData.detailedProgress = { mem: [], cons: [], rev: [] };
+        if (!studentData.tasksTiming)
+          studentData.tasksTiming = { mem: {}, cons: {}, rev: {} };
 
         currentStudent = studentData;
         localStorage.setItem(
@@ -371,7 +393,6 @@ document.addEventListener("DOMContentLoaded", () => {
           JSON.stringify(currentStudent),
         );
 
-        // طلب صلاحية الإشعارات بعد تسجيل الدخول بنجاح
         requestFCMToken(currentStudent);
 
         loginScreen.style.display = "none";
@@ -384,14 +405,18 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.disabled = false;
       }
     });
+  }
 
-  document.getElementById("btn-logout").addEventListener("click", () => {
-    localStorage.removeItem("wathbah_student_session");
-    currentStudent = null;
-    dashboardScreen.style.display = "none";
-    loginScreen.style.display = "flex";
-    document.getElementById("login-pin").value = "";
-  });
+  const btnLogout = document.getElementById("btn-logout");
+  if (btnLogout) {
+    btnLogout.addEventListener("click", () => {
+      localStorage.removeItem("wathbah_student_session");
+      currentStudent = null;
+      dashboardScreen.style.display = "none";
+      loginScreen.style.display = "flex";
+      document.getElementById("login-pin").value = "";
+    });
+  }
 
   async function loadStudentDashboard() {
     dashboardScreen.style.display = "block";
@@ -457,21 +482,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
       document.getElementById("st-today-label").textContent =
         getDateLabel(currentDay);
-      document.getElementById("st-task-mem").textContent = getTaskText(
-        currentStudent.trackId,
-        "mem",
-        currentDay,
-      );
-      document.getElementById("st-task-cons").textContent = getTaskText(
-        currentStudent.trackId,
-        "cons",
-        currentDay,
-      );
-      document.getElementById("st-task-rev").textContent = getTaskText(
-        currentStudent.trackId,
-        "rev",
-        currentDay,
-      );
+
+      let memTimeStr = "";
+      let consTimeStr = "";
+      let revTimeStr = "";
+
+      if (currentStudent.progress?.mem?.includes(currentDay)) {
+        const t = currentStudent.tasksTiming?.mem?.["day_" + currentDay];
+        if (t) memTimeStr = ` (بعد ${t} ${t === "فجر" ? "🌅" : "🌇"})`;
+      }
+      if (currentStudent.progress?.cons?.includes(currentDay)) {
+        const t = currentStudent.tasksTiming?.cons?.["day_" + currentDay];
+        if (t) consTimeStr = ` (بعد ${t} ${t === "فجر" ? "🌅" : "🌇"})`;
+      }
+      if (currentStudent.progress?.rev?.includes(currentDay)) {
+        const t = currentStudent.tasksTiming?.rev?.["day_" + currentDay];
+        if (t) revTimeStr = ` (بعد ${t} ${t === "فجر" ? "🌅" : "🌇"})`;
+      }
+
+      document.getElementById("st-task-mem").innerHTML =
+        getTaskText(currentStudent.trackId, "mem", currentDay) +
+        `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${memTimeStr}</span>`;
+      document.getElementById("st-task-cons").innerHTML =
+        getTaskText(currentStudent.trackId, "cons", currentDay) +
+        `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${consTimeStr}</span>`;
+      document.getElementById("st-task-rev").innerHTML =
+        getTaskText(currentStudent.trackId, "rev", currentDay) +
+        `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${revTimeStr}</span>`;
 
       const todayIso = new Date().toISOString().split("T")[0];
       const todayRecord = records.find((r) => r.date === todayIso);
@@ -502,12 +539,61 @@ document.addEventListener("DOMContentLoaded", () => {
         statusDiv.textContent =
           "لم يقم المعلم بتسجيل إنجازك وحضورك لهذا اليوم حتى الآن.";
       }
+
+      // --- برمجة عرض المنهج الكامل للطالب ---
+      const btnShowSyllabus = document.getElementById("btn-show-syllabus");
+      if (btnShowSyllabus) {
+        btnShowSyllabus.onclick = () => {
+          const modal = document.getElementById("syllabus-modal");
+          const tbody = document.getElementById("syllabus-modal-tbody");
+          const trackNameEl = document.getElementById("syllabus-track-name");
+
+          trackNameEl.textContent = trackInfo
+            ? trackInfo.name
+            : "المسار غير محدد";
+          const sched = scheduleData[currentStudent.trackId] || [];
+          tbody.innerHTML = "";
+
+          sched.forEach((item) => {
+            const isMemDone = currentStudent.progress?.mem?.includes(item.day);
+            const isConsDone = currentStudent.progress?.cons?.includes(
+              item.day,
+            );
+            const isRevDone = currentStudent.progress?.rev?.includes(item.day);
+
+            const memStyle = isMemDone
+              ? "text-decoration: line-through; color: #166534; font-weight: bold;"
+              : "color: var(--text-dark);";
+            const consStyle = isConsDone
+              ? "text-decoration: line-through; color: #166534; font-weight: bold;"
+              : "color: var(--text-dark);";
+            const revStyle = isRevDone
+              ? "text-decoration: line-through; color: #166534; font-weight: bold;"
+              : "color: var(--text-dark);";
+
+            const isCurrentDay = item.day === currentDay;
+            const rowClass = isCurrentDay ? 'class="day-highlight"' : "";
+
+            tbody.innerHTML += `
+              <tr ${rowClass}>
+                <td style="font-weight: bold; width: 130px;">${getDateLabel(item.day)}</td>
+                <td>
+                  <div style="margin-bottom:6px; font-size: 0.8rem; ${memStyle}">📖 حفظ: ${item.mem} ${isMemDone ? "✅" : ""}</div>
+                  <div style="margin-bottom:6px; font-size: 0.8rem; ${consStyle}">🔄 تثبيت: ${item.cons} ${isConsDone ? "✅" : ""}</div>
+                  <div style="font-size: 0.8rem; ${revStyle}">🔁 مراجعة: ${item.rev} ${isRevDone ? "✅" : ""}</div>
+                </td>
+              </tr>
+            `;
+          });
+
+          modal.classList.add("active");
+        };
+      }
     } catch (error) {
       console.error("خطأ في جلب بيانات الطالب:", error);
     }
   }
 
-  // --- إرسال رسالة من حساب الطالب إلى السحابة ---
   const msgForm = document.getElementById("student-message-form");
   if (msgForm) {
     msgForm.addEventListener("submit", async (e) => {
@@ -547,9 +633,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  document
-    .getElementById("student-password-form")
-    .addEventListener("submit", async (e) => {
+  const passForm = document.getElementById("student-password-form");
+  if (passForm) {
+    passForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const newPin = document.getElementById("st-new-pin").value;
 
@@ -575,4 +661,5 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("حدث خطأ أثناء تغيير الرقم السري، تأكد من الاتصال بالإنترنت.");
       }
     });
+  }
 });
