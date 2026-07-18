@@ -47,14 +47,24 @@
             id="login-password-group"
             style="display: none"
           >
-            <input
-              type="password"
-              id="login-password"
-              class="w-input"
-              placeholder="الرقم السري"
-              required
-              disabled
-            />
+            <!-- تمت إضافة العين الشفافة هنا -->
+            <div class="password-wrapper">
+              <input
+                type="password"
+                id="login-password"
+                class="w-input"
+                placeholder="الرقم السري"
+                required
+                disabled
+              />
+              <button type="button" class="toggle-password-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                  <path
+                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
           <button type="submit" id="btn-submit" class="w-btn-submit" disabled>
             تسجيل الدخول
@@ -214,7 +224,7 @@
             📬 صندوق الرسائل
           </button>
 
-          <!-- زر الإشعارات الجديد للإدارة والإشراف -->
+          <!-- زر الإشعارات تمت إضافته هنا -->
           <button
             class="nav-btn"
             data-target="push-notifications"
@@ -314,7 +324,18 @@
           <div class="stats-grid" id="main-dashboard-grid"></div>
         </div>
 
-        <!-- قسم الإشعارات الذكية الجديد -->
+        <div id="messages-box" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>صندوق الرسائل الواردة 📬</h2>
+          </div>
+          <div
+            id="messages-container"
+            style="display: flex; flex-direction: column; gap: 1rem"
+          ></div>
+        </div>
+
+        <!-- شاشة إرسال الإشعارات الفورية -->
         <div id="push-notifications" class="app-section">
           <div class="top-page-header">
             <div></div>
@@ -350,7 +371,6 @@
                   <option value="specific_supervisor">إلى مشرف محدد</option>
                 </select>
               </div>
-
               <div
                 class="input-group"
                 id="notif-user-select-group"
@@ -359,7 +379,6 @@
                 <label>تحديد المستخدم</label>
                 <select id="notif-target-user" class="modern-input"></select>
               </div>
-
               <div class="input-group" style="margin: 0">
                 <label>عنوان الإشعار</label>
                 <input
@@ -392,19 +411,6 @@
                 إرسال الإشعار 🚀
               </button>
             </form>
-          </div>
-        </div>
-
-        <div id="messages-box" class="app-section">
-          <div class="top-page-header">
-            <div></div>
-            <h2>صندوق الرسائل الواردة 📬</h2>
-          </div>
-          <div
-            id="messages-container"
-            style="display: flex; flex-direction: column; gap: 1rem"
-          >
-            <!-- سيتم جلب وعرض الرسائل هنا برمجياً -->
           </div>
         </div>
 
@@ -485,9 +491,9 @@
                     required
                   />
                 </div>
+                <!-- تم جعل الهوية اختيارية ورقم الجوال أساسي -->
                 <div style="display: flex; gap: 10px">
                   <div class="input-group" style="flex: 1">
-                    <!-- تم تعديل رقم الهوية ليصبح اختيارياً -->
                     <input
                       type="text"
                       id="stu-id-number"
@@ -496,26 +502,38 @@
                     />
                   </div>
                   <div class="input-group" style="flex: 1">
-                    <!-- رقم الجوال إجباري للربط مع الإشعارات -->
                     <input
                       type="tel"
                       id="stu-phone"
                       class="modern-input"
-                      placeholder="رقم الجوال (للدخول والإشعارات)"
+                      placeholder="رقم الجوال (أساسي)"
                       required
                     />
                   </div>
                 </div>
+                <!-- العين للرقم السري للطالب -->
                 <div class="input-group">
-                  <input
-                    type="password"
-                    id="stu-pin"
-                    class="modern-input"
-                    placeholder="الرقم السري (للدخول) - افتراضي 1234"
-                    maxlength="4"
-                    value="1234"
-                    required
-                  />
+                  <div class="password-wrapper">
+                    <input
+                      type="password"
+                      id="stu-pin"
+                      class="modern-input"
+                      placeholder="الرقم السري (للدخول) - افتراضي 1234"
+                      maxlength="4"
+                      value="1234"
+                      required
+                    />
+                    <button type="button" class="toggle-password-btn">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div class="input-group">
                   <select id="stu-level" class="modern-input" required>
@@ -559,25 +577,38 @@
                     required
                   />
                 </div>
-                <!-- تمت إضافة حقل رقم الجوال للمعلم -->
+                <!-- إضافة رقم الجوال للمعلم -->
                 <div class="input-group">
                   <input
                     type="tel"
                     id="teacher-phone"
                     class="modern-input"
-                    placeholder="رقم الجوال (للإشعارات)"
+                    placeholder="رقم الجوال (للدخول والإشعارات)"
                     required
                   />
                 </div>
+                <!-- العين للرقم السري للمعلم -->
                 <div class="input-group">
-                  <input
-                    type="password"
-                    id="teacher-pin"
-                    class="modern-input"
-                    placeholder="الرقم السري (4 أرقام)"
-                    maxlength="4"
-                    required
-                  />
+                  <div class="password-wrapper">
+                    <input
+                      type="password"
+                      id="teacher-pin"
+                      class="modern-input"
+                      placeholder="الرقم السري (4 أرقام)"
+                      maxlength="4"
+                      required
+                    />
+                    <button type="button" class="toggle-password-btn">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" class="btn-submit">حفظ المعلم</button>
               </form>
@@ -604,19 +635,32 @@
                     type="tel"
                     id="supervisor-phone"
                     class="modern-input"
-                    placeholder="رقم الجوال (للإشعارات)"
+                    placeholder="رقم الجوال"
                     required
                   />
                 </div>
+                <!-- العين للرقم السري للمشرف -->
                 <div class="input-group">
-                  <input
-                    type="password"
-                    id="supervisor-pin"
-                    class="modern-input"
-                    placeholder="الرقم السري (4 أرقام)"
-                    maxlength="4"
-                    required
-                  />
+                  <div class="password-wrapper">
+                    <input
+                      type="password"
+                      id="supervisor-pin"
+                      class="modern-input"
+                      placeholder="الرقم السري (4 أرقام)"
+                      maxlength="4"
+                      required
+                    />
+                    <button type="button" class="toggle-password-btn">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" class="btn-submit">حفظ المشرف</button>
               </form>
@@ -698,8 +742,8 @@
               <h3 class="content-card-title">تأسيس حلقة جديدة</h3>
               <form id="new-circle-form">
                 <div class="input-group">
-                  <label>اسم الحلقة</label
-                  ><input
+                  <label>اسم الحلقة</label>
+                  <input
                     type="text"
                     id="new-circle-name"
                     class="modern-input"
@@ -754,8 +798,8 @@
                   <select id="new-circle-track" class="modern-input"></select>
                 </div>
                 <div class="input-group">
-                  <label>المعلم المكلف</label
-                  ><select
+                  <label>المعلم المكلف</label>
+                  <select
                     id="new-circle-teacher"
                     class="modern-input"
                     required
@@ -779,8 +823,8 @@
               </p>
               <form id="assign-students-form">
                 <div class="input-group">
-                  <label>اختر الحلقة</label
-                  ><select
+                  <label>اختر الحلقة</label>
+                  <select
                     id="assign-circle-select"
                     class="modern-input"
                     required
@@ -928,8 +972,8 @@
               "
             >
               <div class="input-group" style="margin: 0; flex: 1">
-                <label>تاريخ التقرير</label
-                ><input
+                <label>تاريخ التقرير</label>
+                <input
                   type="date"
                   id="report-date-input"
                   class="modern-input"
@@ -940,8 +984,8 @@
                 style="margin: 0; flex: 1"
                 id="report-filter-group"
               >
-                <label>تخصيص التقرير (الحلقة)</label
-                ><select id="report-circle-filter" class="modern-input">
+                <label>تخصيص التقرير (الحلقة)</label>
+                <select id="report-circle-filter" class="modern-input">
                   <option value="all">كافة الحلقات</option>
                 </select>
               </div>
@@ -995,15 +1039,28 @@
             <div class="content-card">
               <h3 class="content-card-title">إعدادات الحساب</h3>
               <form id="password-change-form">
+                <!-- العين للرقم السري الجديد -->
                 <div class="input-group">
-                  <label>تغيير الرقم السري</label
-                  ><input
-                    type="password"
-                    id="new-pin"
-                    class="modern-input"
-                    placeholder="الرقم السري الجديد"
-                    required
-                  />
+                  <label>تغيير الرقم السري</label>
+                  <div class="password-wrapper">
+                    <input
+                      type="password"
+                      id="new-pin"
+                      class="modern-input"
+                      placeholder="الرقم السري الجديد"
+                      required
+                    />
+                    <button type="button" class="toggle-password-btn">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" class="btn-submit">تحديث البيانات</button>
               </form>
@@ -1163,7 +1220,6 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <!-- مكتبة الإشعارات (Firebase Messaging) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
     <script src="firebase.js"></script>
     <script src="app.js"></script>
