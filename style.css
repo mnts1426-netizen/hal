@@ -926,7 +926,87 @@ img.print-watermark {
     padding: 1.2rem;
   }
 }
+/* =======================================================
+   تنسيقات زر إظهار/إخفاء كلمة المرور الاحترافي (العين)
+   ======================================================= */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.password-wrapper .modern-input,
+.password-wrapper .w-input {
+  padding-left: 40px !important; /* ترك مساحة للعين في اليسار */
+  width: 100%;
+  margin: 0;
+}
+.toggle-password-btn {
+  position: absolute;
+  left: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8; /* لون رصاصي هادئ ورسمي */
+  transition: var(--transition);
+  height: 100%;
+}
+.toggle-password-btn:hover {
+  color: var(--primary-blue);
+}
+.toggle-password-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
 
+/* =======================================================
+   تنسيقات نافذة المنهج الكامل للطالب
+   ======================================================= */
+.full-schedule-wrapper {
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-top: 1rem;
+  background: #fff;
+}
+.full-schedule-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+}
+.full-schedule-wrapper th {
+  background: var(--primary-light);
+  color: var(--primary-blue);
+  padding: 12px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 2px solid var(--gold-text);
+  font-size: 0.85rem;
+}
+.full-schedule-wrapper td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  color: var(--text-dark);
+}
+.full-schedule-wrapper tr:nth-child(even) {
+  background-color: #f8fafc;
+}
+.full-schedule-wrapper tr.day-highlight {
+  background-color: #e0f8f5; /* تمييز لون يوم الطالب الحالي */
+  border-right: 3px solid var(--gold-text);
+}
+.full-schedule-wrapper tr.day-highlight td {
+  font-weight: 700;
+  color: var(--primary-blue);
+}
 /* =======================================================
    طباعة رسمية واحترافية للجمعية
    ======================================================= */
