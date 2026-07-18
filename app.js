@@ -9,6 +9,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   updateOnlineStatus();
 
+  // أيقونات العين الرسمية (مفتوحة ومغلقة)
+  const eyeOpenSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
+  const eyeClosedSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`;
+
+  // --- تفعيل زر عرض/إخفاء الرقم السري (👁️) بدون الإيموجي ---
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".toggle-password-btn, .toggle-password");
+    if (btn) {
+      const container = btn.parentElement;
+      const input = container.querySelector("input");
+      if (input) {
+        if (input.type === "password") {
+          input.type = "text";
+          btn.innerHTML = eyeClosedSVG;
+        } else {
+          input.type = "password";
+          btn.innerHTML = eyeOpenSVG;
+        }
+      }
+    }
+  });
+
   const PERMISSIONS = {
     MANAGE_ADMINS: "manage_admins",
     MANAGE_SETTINGS: "manage_settings",
@@ -22,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
     VIEW_REPORTS: "view_reports",
     RECORD_ATTENDANCE: "record_attendance",
     MANAGE_ALL_RECORDS: "manage_all_records",
-    SEND_NOTIFICATIONS: "send_notifications", // صلاحية الإشعارات
+    SEND_NOTIFICATIONS: "send_notifications",
   };
 
   const ROLE_PERMISSIONS = {
@@ -39,13 +61,14 @@ document.addEventListener("DOMContentLoaded", () => {
       PERMISSIONS.VIEW_AUDIT_LOGS,
       PERMISSIONS.MANAGE_SETTINGS,
       PERMISSIONS.MANAGE_ALL_RECORDS,
-      PERMISSIONS.SEND_NOTIFICATIONS, // المشرف يمتلك صلاحية الإشعارات
+      PERMISSIONS.SEND_NOTIFICATIONS,
     ],
     teacher: [
       PERMISSIONS.RECORD_ATTENDANCE,
       PERMISSIONS.VIEW_DASHBOARD,
       PERMISSIONS.VIEW_REPORTS,
       PERMISSIONS.MANAGE_SETTINGS,
+      PERMISSIONS.MANAGE_STUDENTS, // إتاحة إضافة الطلاب للمعلم
     ],
   };
 
@@ -361,7 +384,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // --- تفعيل وطلب رمز الإشعارات (FCM Token) للمدير والمشرف والمعلم ---
   async function requestFCMToken(userObj, collection) {
     if (
       typeof firebase !== "undefined" &&
@@ -372,7 +394,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const messaging = firebase.messaging();
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
-          // استبدل بـ VAPID Key الخاص بك
           const token = await messaging.getToken({
             vapidKey: "YOUR_PUBLIC_VAPID_KEY_HERE",
           });
@@ -382,10 +403,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
       } catch (error) {
-        console.log(
-          "لم يتم تفعيل الإشعارات لهذا الجهاز أو المتصفح لا يدعمها.",
-          error,
-        );
+        console.log("لم يتم تفعيل الإشعارات.", error);
       }
     }
   }
@@ -401,11 +419,11 @@ document.addEventListener("DOMContentLoaded", () => {
         .orderBy("timestamp", "desc")
         .limit(50)
         .get();
-
       const messagesSnap = await dbFirestore
         .collection("messages")
         .orderBy("timestamp", "desc")
         .get();
+
       let loadedMessages = messagesSnap.docs.map((doc) => doc.data());
 
       let loadedStudents = studentsSnap.docs.map((doc) => {
@@ -415,10 +433,11 @@ document.addEventListener("DOMContentLoaded", () => {
           s.manualProgress = { mem: "", cons: "", rev: "" };
         if (!s.detailedProgress)
           s.detailedProgress = { mem: [], cons: [], rev: [] };
+        // إضافة الحقل الجديد الخاص بتوقيت المهام للحفاظ على التوافق
+        if (!s.tasksTiming) s.tasksTiming = { mem: {}, cons: {}, rev: {} };
         if (!s.trackId) s.trackId = "";
         if (!s.circleId) s.circleId = "";
         if (!s.level) s.level = "غير محدد";
-        // التوافق مع السجلات القديمة وحماية النظام إذا لم يكن هناك جوال مسجل
         if (!s.phone) s.phone = "";
         if (!s.idNumber) s.idNumber = "";
         return s;
@@ -431,12 +450,13 @@ document.addEventListener("DOMContentLoaded", () => {
       let loadedUsers = { admin: [], supervisor: [], teacher: [] };
       usersSnap.docs.forEach((doc) => {
         let u = doc.data();
-        // التوافق مع المعلمين القدامى
         if (!u.phone) u.phone = "";
         if (u.role && loadedUsers[u.role]) loadedUsers[u.role].push(u);
       });
 
       let isFirstSeed = false;
+
+      // التأسيس الذكي والآمن للمدراء الجدد (عبدالله، يوسف، الإدارة)
       if (loadedUsers.admin.length === 0) {
         const defaultAdmin = {
           id: "a1",
@@ -447,6 +467,30 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         loadedUsers.admin.push(defaultAdmin);
         isFirstSeed = true;
+      }
+
+      if (!loadedUsers.admin.find((a) => a.name === "يوسف مهدي")) {
+        const yousefAdmin = {
+          id: "a2_yousef",
+          name: "يوسف مهدي",
+          role: "admin",
+          pin: "0000",
+          phone: "",
+        };
+        loadedUsers.admin.push(yousefAdmin);
+        if (!isFirstSeed) syncToFirestore("users", yousefAdmin.id, yousefAdmin);
+      }
+
+      if (!loadedUsers.admin.find((a) => a.name === "ادارة البرنامج")) {
+        const idaraAdmin = {
+          id: "a3_idara",
+          name: "ادارة البرنامج",
+          role: "admin",
+          pin: "0000",
+          phone: "",
+        };
+        loadedUsers.admin.push(idaraAdmin);
+        if (!isFirstSeed) syncToFirestore("users", idaraAdmin.id, idaraAdmin);
       }
 
       window.db = {
@@ -461,7 +505,11 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       saveLocalDB();
-      if (isFirstSeed) syncToFirestore("users", "a1", window.db.users.admin[0]);
+      if (isFirstSeed) {
+        window.db.users.admin.forEach((admin) =>
+          syncToFirestore("users", admin.id, admin),
+        );
+      }
     } catch (e) {
       console.warn("استخدام النسخة المحلية للبيانات بسبب انقطاع الاتصال.", e);
       const stored = localStorage.getItem("wathbah_db");
@@ -470,6 +518,9 @@ document.addEventListener("DOMContentLoaded", () => {
         window.db.tracks = tracksDefinition;
         window.db.scheduleData = scheduleData;
         if (!window.db.messages) window.db.messages = [];
+        window.db.students.forEach((s) => {
+          if (!s.tasksTiming) s.tasksTiming = { mem: {}, cons: {}, rev: {} };
+        });
       } else {
         window.db = {
           tracks: tracksDefinition,
@@ -548,7 +599,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const container = document.getElementById("messages-container");
     if (!container) return;
     container.innerHTML = "";
-
     let visibleMessages = window.db.messages || [];
 
     if (currentUser.role === "teacher") {
@@ -640,6 +690,8 @@ document.addEventListener("DOMContentLoaded", () => {
         hasPermission(currentUser.role, PERMISSIONS.MANAGE_SUPERVISORS)
           ? "block"
           : "none";
+
+    // إخفاء كروت إضافة المعلمين عن المعلم مهما كانت صلاحياته
     if (document.getElementById("add-teacher-card"))
       document.getElementById("add-teacher-card").style.display = hasPermission(
         currentUser.role,
@@ -647,16 +699,16 @@ document.addEventListener("DOMContentLoaded", () => {
       )
         ? "block"
         : "none";
-    if (document.getElementById("report-filter-group"))
-      document.getElementById("report-filter-group").style.display =
-        currentUser.role === "teacher" ? "none" : "block";
     if (document.getElementById("teachers-management-section"))
       document.getElementById("teachers-management-section").style.display =
         hasPermission(currentUser.role, PERMISSIONS.MANAGE_TEACHERS)
           ? "block"
           : "none";
 
-    // تفعيل الإشعارات وتسجيل الـ Token في السحابة
+    if (document.getElementById("report-filter-group"))
+      document.getElementById("report-filter-group").style.display =
+        currentUser.role === "teacher" ? "none" : "block";
+
     requestFCMToken(currentUser, "users");
 
     const firstBtn = document.querySelector('.nav-btn[style*="display: flex"]');
@@ -669,9 +721,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     refreshAllViews();
 
-    if (!isAutoSession) {
-      addLog("تسجيل الدخول للنظام", "عام");
-    }
+    if (!isAutoSession) addLog("تسجيل الدخول للنظام", "عام");
   }
 
   setTimeout(async () => {
@@ -703,6 +753,11 @@ document.addEventListener("DOMContentLoaded", () => {
     submitBtn.disabled = true;
     loginPasswordGroup.style.display = "none";
     loginPasswordInput.disabled = true;
+
+    // إعادة حقل كلمة المرور لوضعه الطبيعي المغلق إذا قام بتغيير الحساب
+    loginPasswordInput.type = "password";
+    const toggleBtn = loginPasswordGroup.querySelector(".toggle-password-btn");
+    if (toggleBtn) toggleBtn.innerHTML = eyeOpenSVG;
   });
 
   userSelect.addEventListener("change", () => {
@@ -827,13 +882,11 @@ document.addEventListener("DOMContentLoaded", () => {
         syncToFirestore("messages", newMsg.id, newMsg);
         saveLocalDB();
         renderMessages();
-
         alert("تم إرسال رسالتك للإدارة بنجاح! 🚀");
         e.target.reset();
       });
   }
 
-  // --- برمجة الإشعارات الفورية (الجديدة) ---
   const notifTargetType = document.getElementById("notif-target-type");
   const notifUserGroup = document.getElementById("notif-user-select-group");
   const notifTargetUser = document.getElementById("notif-target-user");
@@ -916,7 +969,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateDashboardStats() {
     const dashGrid = document.getElementById("main-dashboard-grid");
     if (!dashGrid) return;
-
     const isTeacher = currentUser.role === "teacher";
     const students = isTeacher
       ? window.db.students.filter((s) => s.circleId === currentUser.circleId)
@@ -1080,7 +1132,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const newStudent = {
         id: "s" + Date.now(),
         name: sName,
-        // رقم الهوية أصبح اختيارياً
         idNumber: idInput ? idInput.value : "",
         phone: phoneInput ? phoneInput.value : "",
         pin: document.getElementById("stu-pin").value,
@@ -1090,10 +1141,19 @@ document.addEventListener("DOMContentLoaded", () => {
         progress: { mem: [], cons: [], rev: [] },
         manualProgress: { mem: "", cons: "", rev: "" },
         detailedProgress: { mem: [], cons: [], rev: [] },
+        tasksTiming: { mem: {}, cons: {}, rev: {} },
       };
 
       window.db.students.push(newStudent);
       e.target.reset();
+
+      const pinField = document.getElementById("stu-pin");
+      if (pinField) {
+        pinField.type = "password";
+        const tb = pinField.nextElementSibling;
+        if (tb) tb.innerHTML = eyeOpenSVG;
+      }
+
       saveLocalDB();
       syncToFirestore("students", newStudent.id, newStudent);
       refreshAllViews();
@@ -1126,6 +1186,14 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       window.db.users.teacher.push(newTeacher);
       e.target.reset();
+
+      const pinField = document.getElementById("teacher-pin");
+      if (pinField) {
+        pinField.type = "password";
+        const tb = pinField.nextElementSibling;
+        if (tb) tb.innerHTML = eyeOpenSVG;
+      }
+
       saveLocalDB();
       syncToFirestore("users", newTeacher.id, newTeacher);
       refreshAllViews();
@@ -1150,6 +1218,14 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       window.db.users.supervisor.push(newSup);
       e.target.reset();
+
+      const pinField = document.getElementById("supervisor-pin");
+      if (pinField) {
+        pinField.type = "password";
+        const tb = pinField.nextElementSibling;
+        if (tb) tb.innerHTML = eyeOpenSVG;
+      }
+
       saveLocalDB();
       syncToFirestore("users", newSup.id, newSup);
       refreshAllViews();
@@ -1394,6 +1470,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!tbody) return;
     tbody.innerHTML = "";
     let displayStudents = window.db.students;
+
+    if (currentUser.role === "teacher") {
+      displayStudents = displayStudents.filter(
+        (s) => s.circleId === currentUser.circleId,
+      );
+    }
+
     displayStudents.forEach((s) => {
       const track = window.db.tracks.find((t) => t.id === s.trackId) || {
         name: "غير محدد",
@@ -1441,12 +1524,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const fields = document.getElementById("edit-form-fields");
     fields.innerHTML = "";
 
+    const eyeOpenSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
+
     if (type === "student") {
       const s = window.db.students.find((x) => x.id === id);
-      if (!s)
-        return alert(
-          "خطأ: لم يتم العثور على بيانات الطالب. يرجى تحديث الصفحة.",
-        );
+      if (!s) return alert("خطأ: لم يتم العثور على بيانات الطالب.");
       document.getElementById("edit-modal-title").textContent =
         "تعديل بيانات الطالب";
       let trackOpts = "";
@@ -1454,26 +1536,24 @@ document.addEventListener("DOMContentLoaded", () => {
         (t) =>
           (trackOpts += `<option value="${t.id}" ${s.trackId === t.id ? "selected" : ""}>${t.name}</option>`),
       );
-
       let circleOpts = "<option value=''>غير موزع لحلقة</option>";
       window.db.circles.forEach((c) => {
         circleOpts += `<option value="${c.id}" ${s.circleId === c.id ? "selected" : ""}>${c.name}</option>`;
       });
 
-      // إضافة رقم الجوال وجعل الهوية اختيارية في واجهة التعديل
       fields.innerHTML = `
         <div class="input-group"><label>اسم الطالب</label><input type="text" id="edit-stu-name" class="modern-input" value="${s.name}" required></div>
         <div style="display:flex; gap:10px;">
           <div class="input-group" style="flex:1"><label>رقم الهوية</label><input type="text" id="edit-stu-id" class="modern-input" value="${s.idNumber || ""}"></div>
           <div class="input-group" style="flex:1"><label>رقم الجوال</label><input type="tel" id="edit-stu-phone" class="modern-input" value="${s.phone || ""}" required></div>
         </div>
-        <div class="input-group"><label>الرقم السري</label><input type="password" id="edit-stu-pin" class="modern-input" value="${s.pin || "1234"}" maxlength="4" required></div>
+        <div class="input-group"><label>الرقم السري</label><div class="password-wrapper"><input type="password" id="edit-stu-pin" class="modern-input" value="${s.pin || "1234"}" maxlength="4" required><button type="button" class="toggle-password-btn">${eyeOpenSVG}</button></div></div>
         <div class="input-group"><label>المسار</label><select id="edit-stu-track" class="modern-input">${trackOpts}</select></div>
         <div class="input-group"><label>الحلقة</label><select id="edit-stu-circle" class="modern-input">${circleOpts}</select></div>
       `;
     } else if (type === "teacher") {
       const t = window.db.users.teacher.find((x) => x.id === id);
-      if (!t) return alert("خطأ: لم يتم العثور على بيانات المعلم.");
+      if (!t) return alert("خطأ.");
       document.getElementById("edit-modal-title").textContent =
         "تعديل بيانات المعلم";
       let cOpts = "<option value=''>غير مكلف بأي حلقة</option>";
@@ -1481,11 +1561,10 @@ document.addEventListener("DOMContentLoaded", () => {
         (c) =>
           (cOpts += `<option value="${c.id}" ${t.circleId === c.id ? "selected" : ""}>${c.name}</option>`),
       );
-      // إضافة رقم الجوال للمعلم في واجهة التعديل
       fields.innerHTML = `
         <div class="input-group"><label>اسم المعلم</label><input type="text" id="edit-teacher-name" class="modern-input" value="${t.name}" required></div>
         <div class="input-group"><label>رقم الجوال</label><input type="tel" id="edit-teacher-phone" class="modern-input" value="${t.phone || ""}" required></div>
-        <div class="input-group"><label>الرقم السري</label><input type="text" id="edit-teacher-pin" class="modern-input" value="${t.pin}" pattern="\\d{4}" maxlength="4" required></div>
+        <div class="input-group"><label>الرقم السري</label><div class="password-wrapper"><input type="password" id="edit-teacher-pin" class="modern-input" value="${t.pin}" pattern="\\d{4}" maxlength="4" required><button type="button" class="toggle-password-btn">${eyeOpenSVG}</button></div></div>
         <div class="input-group"><label>الحلقة المكلف بها</label><select id="edit-teacher-circle" class="modern-input">${cOpts}</select></div>
       `;
     } else if (type === "track") {
@@ -1495,7 +1574,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fields.innerHTML = `<div class="input-group"><label>اسم المسار</label><input type="text" id="edit-track-name" class="modern-input" value="${t.name}" required></div>`;
     } else if (type === "circle") {
       const c = window.db.circles.find((x) => x.id === id);
-      if (!c) return alert("خطأ: لم يتم العثور على بيانات الحلقة.");
+      if (!c) return alert("خطأ.");
       document.getElementById("edit-modal-title").textContent =
         "تعديل بيانات الحلقة";
       let teacherOpts = "<option value=''>بدون معلم</option>";
@@ -1640,7 +1719,6 @@ document.addEventListener("DOMContentLoaded", () => {
           newTeacher.circleId = c.id;
           syncToFirestore("users", newTeacher.id, newTeacher);
         }
-
         syncToFirestore("groups", c.id, c);
         addLog(`تعديل مسار ومعلم الحلقة`, c.name);
       }
@@ -1869,6 +1947,7 @@ document.addEventListener("DOMContentLoaded", () => {
           attColor = "#991b1b";
         }
       }
+
       const manualStr = student.manualProgress
         ? ` (ح:${student.manualProgress?.mem || 0}, ث:${student.manualProgress?.cons || 0}, م:${student.manualProgress?.rev || 0})`
         : "";
@@ -1880,6 +1959,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ? `أيام المنهج: ${student.progress?.mem?.length || 0}/${student.progress?.cons?.length || 0}/${student.progress?.rev?.length || 0}${manualStr}${timeStr}`
         : "لا يوجد إنجاز جديد";
       const notesStr = record && record.notes ? record.notes : "-";
+
       tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td>${notesStr}</td></tr>`;
     });
   }
@@ -1983,6 +2063,8 @@ document.addEventListener("DOMContentLoaded", () => {
         student.manualProgress = { mem: "", cons: "", rev: "" };
       if (!student.detailedProgress)
         student.detailedProgress = { mem: [], cons: [], rev: [] };
+      if (!student.tasksTiming)
+        student.tasksTiming = { mem: {}, cons: {}, rev: {} };
 
       const today = new Date().toISOString().split("T")[0];
       const record = window.db.dailyRecords.find(
@@ -2032,6 +2114,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const isRevChecked = student.progress?.rev?.includes(i)
           ? "checked"
           : "";
+
+        const memTime = student.tasksTiming?.mem?.["day_" + i];
+        const consTime = student.tasksTiming?.cons?.["day_" + i];
+        const revTime = student.tasksTiming?.rev?.["day_" + i];
+
+        const memTimeHtml = memTime
+          ? `<span style="font-size:0.65rem; color:${memTime === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${memTime})</span>`
+          : "";
+        const consTimeHtml = consTime
+          ? `<span style="font-size:0.65rem; color:${consTime === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${consTime})</span>`
+          : "";
+        const revTimeHtml = revTime
+          ? `<span style="font-size:0.65rem; color:${revTime === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${revTime})</span>`
+          : "";
+
         let dayClass = "day-column";
         if (i < currentProgramDay) dayClass += " day-past";
         else if (i === currentProgramDay) dayClass += " day-current";
@@ -2039,11 +2136,11 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="${dayClass}">
             <h4>${getDateLabel(i)}</h4>
             <label class="task-item"><input type="checkbox" name="chk_mem_${i}" value="${i}" ${isMemChecked} ${disableStr}>
-              <div class="task-content"><span class="task-label">📖 حفظ:</span><span class="task-desc">${memText}</span></div></label>
+              <div class="task-content"><span class="task-label">📖 حفظ: ${memTimeHtml}</span><span class="task-desc">${memText}</span></div></label>
             <label class="task-item"><input type="checkbox" name="chk_cons_${i}" value="${i}" ${isConsChecked} ${disableStr}>
-              <div class="task-content"><span class="task-label">🔄 تثبيت:</span><span class="task-desc">${consText}</span></div></label>
+              <div class="task-content"><span class="task-label">🔄 تثبيت: ${consTimeHtml}</span><span class="task-desc">${consText}</span></div></label>
             <label class="task-item"><input type="checkbox" name="chk_rev_${i}" value="${i}" ${isRevChecked} ${disableStr}>
-              <div class="task-content"><span class="task-label">🔁 مراجعة:</span><span class="task-desc">${revText}</span></div></label>
+              <div class="task-content"><span class="task-label">🔁 مراجعة: ${revTimeHtml}</span><span class="task-desc">${revText}</span></div></label>
           </div>`;
       }
       timelineHTML += "</div></div>";
@@ -2054,7 +2151,9 @@ document.addEventListener("DOMContentLoaded", () => {
         let checked = student.detailedProgress?.mem?.includes(h)
           ? "checked"
           : "";
-        memGrid += `<label class="h-item"><input type="checkbox" name="det_mem_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
+        let time = student.tasksTiming?.mem?.["hadith_" + h];
+        let icon = time === "فجر" ? "🌅" : time === "عصر" ? "🌇" : "";
+        memGrid += `<label class="h-item"><input type="checkbox" name="det_mem_${student.id}" value="${h}" ${checked} ${disableStr}> ${h} ${icon}</label>`;
       }
       memGrid += `</div></div>`;
       let consGrid = `<div class="hadith-grid-container"><h5>🔄 أحاديث التثبيت:</h5><div class="hadith-grid">`;
@@ -2062,7 +2161,9 @@ document.addEventListener("DOMContentLoaded", () => {
         let checked = student.detailedProgress?.cons?.includes(h)
           ? "checked"
           : "";
-        consGrid += `<label class="h-item"><input type="checkbox" name="det_cons_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
+        let time = student.tasksTiming?.cons?.["hadith_" + h];
+        let icon = time === "فجر" ? "🌅" : time === "عصر" ? "🌇" : "";
+        consGrid += `<label class="h-item"><input type="checkbox" name="det_cons_${student.id}" value="${h}" ${checked} ${disableStr}> ${h} ${icon}</label>`;
       }
       consGrid += `</div></div>`;
       let revGrid = `<div class="hadith-grid-container"><h5>🔁 أحاديث المراجعة:</h5><div class="hadith-grid">`;
@@ -2070,7 +2171,9 @@ document.addEventListener("DOMContentLoaded", () => {
         let checked = student.detailedProgress?.rev?.includes(h)
           ? "checked"
           : "";
-        revGrid += `<label class="h-item"><input type="checkbox" name="det_rev_${student.id}" value="${h}" ${checked} ${disableStr}> ${h}</label>`;
+        let time = student.tasksTiming?.rev?.["hadith_" + h];
+        let icon = time === "فجر" ? "🌅" : time === "عصر" ? "🌇" : "";
+        revGrid += `<label class="h-item"><input type="checkbox" name="det_rev_${student.id}" value="${h}" ${checked} ${disableStr}> ${h} ${icon}</label>`;
       }
       revGrid += `</div></div>`;
       dropdownHTML += memGrid + consGrid + revGrid + `</div></details>`;
@@ -2119,6 +2222,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const att = e.target.elements["attendance"].value;
             const sTime = e.target.elements["session_time"].value;
             const notes = e.target.elements["notes"].value;
+
+            const oldMemDays = student.progress.mem || [];
+            const oldConsDays = student.progress.cons || [];
+            const oldRevDays = student.progress.rev || [];
+            const oldDetMem = student.detailedProgress.mem || [];
+            const oldDetCons = student.detailedProgress.cons || [];
+            const oldDetRev = student.detailedProgress.rev || [];
+
             let newMem = [],
               newCons = [],
               newRev = [];
@@ -2139,18 +2250,7 @@ document.addEventListener("DOMContentLoaded", () => {
               )
                 newRev.push(i);
             }
-            student.progress.mem = newMem;
-            student.progress.cons = newCons;
-            student.progress.rev = newRev;
-            student.manualProgress.mem = e.target.elements["manual_mem"]
-              ? e.target.elements["manual_mem"].value
-              : "";
-            student.manualProgress.cons = e.target.elements["manual_cons"]
-              ? e.target.elements["manual_cons"].value
-              : "";
-            student.manualProgress.rev = e.target.elements["manual_rev"]
-              ? e.target.elements["manual_rev"].value
-              : "";
+
             let detMem = [],
               detCons = [],
               detRev = [];
@@ -2163,6 +2263,47 @@ document.addEventListener("DOMContentLoaded", () => {
             card
               .querySelectorAll(`input[name="det_rev_${student.id}"]:checked`)
               .forEach((c) => detRev.push(parseInt(c.value)));
+
+            if (sTime !== "غير محدد") {
+              newMem
+                .filter((x) => !oldMemDays.includes(x))
+                .forEach((d) => (student.tasksTiming.mem["day_" + d] = sTime));
+              newCons
+                .filter((x) => !oldConsDays.includes(x))
+                .forEach((d) => (student.tasksTiming.cons["day_" + d] = sTime));
+              newRev
+                .filter((x) => !oldRevDays.includes(x))
+                .forEach((d) => (student.tasksTiming.rev["day_" + d] = sTime));
+
+              detMem
+                .filter((x) => !oldDetMem.includes(x))
+                .forEach(
+                  (h) => (student.tasksTiming.mem["hadith_" + h] = sTime),
+                );
+              detCons
+                .filter((x) => !oldDetCons.includes(x))
+                .forEach(
+                  (h) => (student.tasksTiming.cons["hadith_" + h] = sTime),
+                );
+              detRev
+                .filter((x) => !oldDetRev.includes(x))
+                .forEach(
+                  (h) => (student.tasksTiming.rev["hadith_" + h] = sTime),
+                );
+            }
+
+            student.progress.mem = newMem;
+            student.progress.cons = newCons;
+            student.progress.rev = newRev;
+            student.manualProgress.mem = e.target.elements["manual_mem"]
+              ? e.target.elements["manual_mem"].value
+              : "";
+            student.manualProgress.cons = e.target.elements["manual_cons"]
+              ? e.target.elements["manual_cons"].value
+              : "";
+            student.manualProgress.rev = e.target.elements["manual_rev"]
+              ? e.target.elements["manual_rev"].value
+              : "";
             student.detailedProgress.mem = detMem;
             student.detailedProgress.cons = detCons;
             student.detailedProgress.rev = detRev;
@@ -2180,6 +2321,7 @@ document.addEventListener("DOMContentLoaded", () => {
               notes,
               timestamp: Date.now(),
             };
+
             if (existingRecordIndex > -1)
               window.db.dailyRecords[existingRecordIndex] = newRecord;
             else window.db.dailyRecords.push(newRecord);
