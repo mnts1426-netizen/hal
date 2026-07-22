@@ -125,6 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return dayCount > 0 ? (dayCount > 23 ? 23 : dayCount) : 1;
   }
 
+  // إضافة المسار الجديد (الأربعون النووية) هنا
   const tracksDefinition = [
     {
       id: "t1",
@@ -158,8 +159,10 @@ document.addEventListener("DOMContentLoaded", () => {
       totalHadiths: 222,
     },
     { id: "t7", name: "بلوغ المرام كاملاً", totalDays: 23, totalHadiths: 1564 },
+    { id: "t8", name: "الأربعون النووية", totalDays: 23, totalHadiths: 42 },
   ];
 
+  // توزيع الأحاديث للمسار الجديد (19 يوم حفظ فعلي)
   const memArrays = {
     t1: [
       [1, 9],
@@ -308,6 +311,27 @@ document.addEventListener("DOMContentLoaded", () => {
       [1405, 1474],
       [1475, 1564],
     ],
+    t8: [
+      [1, 2],
+      [3, 4],
+      [5, 6],
+      [7, 8],
+      [9, 11],
+      [12, 13],
+      [14, 15],
+      [16, 17],
+      [18, 19],
+      [20, 22],
+      [23, 24],
+      [25, 26],
+      [27, 28],
+      [29, 30],
+      [31, 33],
+      [34, 35],
+      [36, 37],
+      [38, 39],
+      [40, 42],
+    ],
   };
 
   const scheduleData = {};
@@ -433,7 +457,6 @@ document.addEventListener("DOMContentLoaded", () => {
           s.manualProgress = { mem: "", cons: "", rev: "" };
         if (!s.detailedProgress)
           s.detailedProgress = { mem: [], cons: [], rev: [] };
-        // إضافة الحقل الجديد الخاص بتوقيت المهام للحفاظ على التوافق
         if (!s.tasksTiming) s.tasksTiming = { mem: {}, cons: {}, rev: {} };
         if (!s.trackId) s.trackId = "";
         if (!s.circleId) s.circleId = "";
@@ -456,7 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let isFirstSeed = false;
 
-      // التأسيس الذكي والآمن للمدراء الجدد (عبدالله، يوسف، الإدارة)
+      // التأسيس الذكي والآمن للمدراء الجدد
       if (loadedUsers.admin.length === 0) {
         const defaultAdmin = {
           id: "a1",
@@ -1000,7 +1023,6 @@ document.addEventListener("DOMContentLoaded", () => {
         ? Math.round((totalProgress / (targetDay * 3 * students.length)) * 100)
         : 0;
     if (avgProgress > 100) avgProgress = 100;
-
     if (isTeacher) {
       dashGrid.innerHTML = `<div class="stat-card"><h3>طلاب حلقتي</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div>`;
     } else {
@@ -1930,6 +1952,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const circle = window.db.circles.find(
         (c) => c.id === student.circleId,
       ) || { name: "" };
+      const track = window.db.tracks.find((t) => t.id === student.trackId) || {
+        totalHadiths: 0,
+      };
+
       let attText = "غير مسجل";
       let attColor = "var(--text-gray)";
       if (record) {
@@ -1948,6 +1974,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
+      let highestMem = parseInt(student.manualProgress?.mem) || 0;
+      if (highestMem === 0 && student.detailedProgress?.mem?.length > 0) {
+        highestMem = Math.max(...student.detailedProgress.mem);
+      }
+      const totalHadithsStr = track.totalHadiths
+        ? `${highestMem} من أصل ${track.totalHadiths}`
+        : `${highestMem}`;
+
       const manualStr = student.manualProgress
         ? ` (ح:${student.manualProgress?.mem || 0}, ث:${student.manualProgress?.cons || 0}, م:${student.manualProgress?.rev || 0})`
         : "";
@@ -1960,7 +1994,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : "لا يوجد إنجاز جديد";
       const notesStr = record && record.notes ? record.notes : "-";
 
-      tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td>${notesStr}</td></tr>`;
+      tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td style="font-weight:bold; color:var(--primary-blue);" dir="rtl">${totalHadithsStr}</td><td>${notesStr}</td></tr>`;
     });
   }
 
