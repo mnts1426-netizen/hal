@@ -855,15 +855,7 @@ select.w-input {
   border-color: var(--gold-text);
 }
 
-/* ترويسة وعلامة مائية للطباعة */
-.official-print-header {
-  display: none;
-}
-img.print-watermark {
-  display: none;
-}
-
-/* الجوال (تم إصلاح الطبقات هنا) */
+/* الجوال */
 .mobile-header {
   display: none;
   justify-content: space-between;
@@ -891,7 +883,6 @@ img.print-watermark {
   .mobile-header {
     display: flex;
   }
-  /* تم رفع الـ z-index للقائمة لتظهر فوق كل شيء */
   .sidebar {
     position: fixed;
     top: 0;
@@ -905,7 +896,6 @@ img.print-watermark {
   .sidebar.open {
     right: 0;
   }
-  /* تم رفع الـ z-index للظلال */
   .sidebar-overlay {
     position: fixed;
     top: 0;
@@ -926,9 +916,8 @@ img.print-watermark {
     padding: 1.2rem;
   }
 }
-/* =======================================================
-   تنسيقات زر إظهار/إخفاء كلمة المرور الاحترافي (العين)
-   ======================================================= */
+
+/* زر إظهار/إخفاء كلمة المرور */
 .password-wrapper {
   position: relative;
   display: flex;
@@ -937,7 +926,7 @@ img.print-watermark {
 }
 .password-wrapper .modern-input,
 .password-wrapper .w-input {
-  padding-left: 40px !important; /* ترك مساحة للعين في اليسار */
+  padding-left: 40px !important;
   width: 100%;
   margin: 0;
 }
@@ -951,7 +940,7 @@ img.print-watermark {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #94a3b8; /* لون رصاصي هادئ ورسمي */
+  color: #94a3b8;
   transition: var(--transition);
   height: 100%;
 }
@@ -964,9 +953,7 @@ img.print-watermark {
   fill: currentColor;
 }
 
-/* =======================================================
-   تنسيقات نافذة المنهج الكامل للطالب
-   ======================================================= */
+/* نافذة المنهج الكامل للطالب */
 .full-schedule-wrapper {
   max-height: 60vh;
   overflow-y: auto;
@@ -1000,41 +987,60 @@ img.print-watermark {
   background-color: #f8fafc;
 }
 .full-schedule-wrapper tr.day-highlight {
-  background-color: #e0f8f5; /* تمييز لون يوم الطالب الحالي */
+  background-color: #e0f8f5;
   border-right: 3px solid var(--gold-text);
 }
 .full-schedule-wrapper tr.day-highlight td {
   font-weight: 700;
   color: var(--primary-blue);
 }
+
 /* =======================================================
-   طباعة رسمية واحترافية للجمعية
+   إعدادات الطباعة الصحيحة (التي تحل مشكلة الصفحة الواحدة)
    ======================================================= */
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #reports,
-  #reports * {
-    visibility: visible;
-  }
-  #reports {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    padding: 0;
-    margin: 0;
-    background: #fff;
-  }
-
+  /* إخفاء القوائم، الأزرار، الشاشات الجانبية وأي شيء لا نريده في الطباعة */
   .sidebar,
+  .sidebar-overlay,
   .mobile-header,
   .top-page-header button,
-  .print-hide {
+  .print-hide,
+  #offline-banner,
+  #global-loader,
+  #login-screen {
     display: none !important;
   }
 
+  /* إخفاء كل أقسام النظام ما عدا قسم التقارير */
+  .app-section:not(#reports) {
+    display: none !important;
+  }
+
+  /* فك قيود الشاشة بالكامل للسماح بتعدد الصفحات (إلغاء 100vh و overflow) */
+  html,
+  body,
+  .app-layout,
+  .main-content {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* إرجاع قسم التقارير للتدفق الطبيعي (إلغاء Absolute التي تقص الصفحات) */
+  #reports {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* العلامة المائية للطباعة */
   img.print-watermark {
     display: block !important;
     position: fixed;
@@ -1048,6 +1054,7 @@ img.print-watermark {
     pointer-events: none;
   }
 
+  /* تنسيق ترويسة الطباعة الرسمية */
   .official-print-header {
     display: flex !important;
     align-items: center;
@@ -1091,11 +1098,26 @@ img.print-watermark {
     color: #444;
   }
 
+  /* فك قيود حاوية الجدول (أهم خطوة لمنع القص الجانبي والعمودي) */
+  .table-wrapper {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    max-height: none !important;
+  }
+
+  /* تنسيق الجدول في الطباعة والسماح بانقسامه بذكاء */
   .modern-table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
     border: 2px solid var(--primary-blue);
+    page-break-inside: auto !important; /* السماح بانقسام الجدول بين الصفحات */
+  }
+  .modern-table tr {
+    page-break-inside: avoid !important; /* منع انقسام الصف الواحد (الاسم) بين صفحتين */
+    page-break-after: auto !important;
   }
   .modern-table th {
     background-color: var(--primary-blue) !important;
@@ -1118,6 +1140,7 @@ img.print-watermark {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
   .content-card {
     box-shadow: none !important;
     border: none !important;
