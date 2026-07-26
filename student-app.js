@@ -325,6 +325,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 500);
   }, 800);
 
+  // =================================================================================
+  // 🚀 التعديل الجذري لطلب الصلاحيات واستقبال إشعارات شريط الجوال (FCM) للطالب
+  // =================================================================================
   async function requestFCMToken(userObj) {
     if (
       typeof firebase !== "undefined" &&
@@ -335,22 +338,46 @@ document.addEventListener("DOMContentLoaded", () => {
         const messaging = firebase.messaging();
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
+          // 1. تسجيل ملف الـ Service Worker لضمان عمل إشعارات شريط الجوال في الخلفية
+          const registration = await navigator.serviceWorker.register(
+            "/firebase-messaging-sw.js",
+          );
+
+          // 2. استخراج التوكن باستخدام الـ VAPID Key
           const token = await messaging.getToken({
-            vapidKey: "YOUR_PUBLIC_VAPID_KEY_HERE",
+            vapidKey:
+              "BLDTgzOIzrk0LpHH2qIbkXo1KNnC8lkL58i36jwuaMT53LB-3z0i6H8wcSMVmSut0RmLN21d68fqNaQVox8vfeM", // ⚠️ هام جداً: ضع مفتاح VAPID الحقيقي هنا
+            serviceWorkerRegistration: registration,
           });
+
+          // 3. تحديث رمز التوكن في ملف الطالب بسحابة Firestore ليتمكن المدير من مراسلته
           if (token && userObj.fcmToken !== token) {
             userObj.fcmToken = token;
             await dbFirestore
               .collection("students")
               .doc(userObj.id)
               .update({ fcmToken: token });
+            console.log("تم تفعيل إشعارات الجوال الفورية للطالب بنجاح.");
           }
+
+          // 4. استلام الإشعارات في حال كان الطالب يفتح الموقع أمام عينيه (Foreground)
+          messaging.onMessage((payload) => {
+            console.log("تم استلام إشعار والطالب داخل الموقع: ", payload);
+            const title = payload.notification?.title || "تنبيه إداري جديد";
+            const body =
+              payload.notification?.body ||
+              "لديك رسالة أو إشعار جديد في النظام.";
+            alert(`🔔 ${title}\n\n${body}`);
+          });
+        } else {
+          console.warn("تم رفض صلاحية الإشعارات من قبل الطالب.");
         }
       } catch (error) {
         console.log("تعذر تفعيل الإشعارات لهذا الجهاز:", error);
       }
     }
   }
+  // =================================================================================
 
   const loginForm = document.getElementById("student-login-form");
   if (loginForm) {
@@ -562,6 +589,51 @@ document.addEventListener("DOMContentLoaded", () => {
           "لم يقم المعلم بتسجيل إنجازك وحضورك لهذا اليوم حتى الآن.";
       }
 
+      // --- جلب وعرض الإشعارات والرسائل الواردة للطالب داخل صفحته ---
+      try {
+        const messagesSnap = await dbFirestore
+          .collection("messages")
+          .orderBy("timestamp", "desc")
+          .get();
+        const allMsgs = messagesSnap.docs.map((doc) => doc.data());
+        // الطالب يستقبل ما يُرسل للجميع، أو لحلقته، أو له شخصياً
+        const studentMsgs = allMsgs.filter(
+          (m) =>
+            m.receiverType === "all_students" ||
+            (m.receiverType === "student" &&
+              m.circleId === currentStudent.circleId) ||
+            m.receiverId === currentStudent.id ||
+            m.targetId === currentStudent.id ||
+            m.targetType === "all_students",
+        );
+
+        const msgContainer =
+          document.getElementById("student-received-messages") ||
+          document.getElementById("student-messages-container");
+        if (msgContainer) {
+          if (studentMsgs.length === 0) {
+            msgContainer.innerHTML =
+              "<p style='text-align:center; color:var(--text-gray); padding:1rem;'>📭 لا توجد إشعارات أو رسائل إدارية جديدة حالياً.</p>";
+          } else {
+            msgContainer.innerHTML = "";
+            studentMsgs.forEach((msg) => {
+              msgContainer.innerHTML += `
+                <div class="content-card" style="margin-bottom:10px; border-right: 4px solid var(--primary-blue); padding: 1rem; background: #fff;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <strong style="color:var(--primary-blue);">${msg.senderName} (${msg.senderRole === "admin" ? "الإدارة" : "المعلم"})</strong>
+                    <span style="font-size:0.75rem; color:gray;" dir="ltr">${msg.date}</span>
+                  </div>
+                  <h4 style="color:var(--gold-text); margin-bottom:5px; font-size:0.95rem;">${msg.subject || msg.title || "تنبيه إداري"}</h4>
+                  <p style="margin:0; font-size:0.85rem; line-height:1.4; color: var(--text-dark);">${msg.text || msg.body}</p>
+                </div>
+              `;
+            });
+          }
+        }
+      } catch (err) {
+        console.log("تعذر جلب الرسائل الواردة للطالب:", err);
+      }
+
       // --- برمجة عرض المنهج الكامل للطالب ---
       const btnShowSyllabus = document.getElementById("btn-show-syllabus");
       if (btnShowSyllabus) {
@@ -616,11 +688,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- إرسال الرسائل والإشعارات من الطالب للإدارة فقط كما هو مشترط ---
   const msgForm = document.getElementById("student-message-form");
   if (msgForm) {
     msgForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const target = document.getElementById("msg-target").value;
+      const targetEl = document.getElementById("msg-target");
+      const target = targetEl ? targetEl.value : "admin"; // توجيه مباشر للإدارة
       const subject = document.getElementById("msg-subject").value;
       const text = document.getElementById("msg-text").value;
       const btn = e.target.querySelector("button");
@@ -633,7 +707,7 @@ document.addEventListener("DOMContentLoaded", () => {
         senderId: currentStudent.id,
         senderName: currentStudent.name,
         senderRole: "student",
-        receiverType: target,
+        receiverType: target || "admin", // ضمان وصولها للمدير دائماً
         circleId: currentStudent.circleId || "",
         subject: subject,
         text: text,
@@ -643,7 +717,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       try {
         await dbFirestore.collection("messages").doc(newMsg.id).set(newMsg);
-        alert("تم إرسال رسالتك بنجاح! 📬");
+        alert("تم إرسال رسالتك إلى إدارة البرنامج بنجاح! 📬");
         msgForm.reset();
       } catch (err) {
         console.error(err);
