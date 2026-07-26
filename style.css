@@ -996,9 +996,15 @@ select.w-input {
 }
 
 /* =======================================================
-   إعدادات الطباعة الصحيحة (التي تحل مشكلة الصفحة الواحدة)
+   إعدادات الطباعة الصحيحة (التي تحل مشكلة الصفحة الواحدة وتوازن الشعارين)
    ======================================================= */
 @media print {
+  /* إجبار المتصفح على طباعة الألوان والصور (الشعار) بشكل أساسي */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   /* إخفاء القوائم، الأزرار، الشاشات الجانبية وأي شيء لا نريده في الطباعة */
   .sidebar,
   .sidebar-overlay,
@@ -1054,7 +1060,7 @@ select.w-input {
     pointer-events: none;
   }
 
-  /* تنسيق ترويسة الطباعة الرسمية */
+  /* تنسيق ترويسة الطباعة الرسمية المحدثة بالشعارين */
   .official-print-header {
     display: flex !important;
     align-items: center;
@@ -1073,29 +1079,53 @@ select.w-input {
     height: 1px;
     background-color: var(--gold-text);
   }
-  .official-print-header img {
-    height: 85px;
-    max-width: 150px;
-    object-fit: contain;
+
+  /* الحاويات الخاصة بالشعارات لتوازن الأطراف */
+  .logo-right,
+  .logo-left {
+    flex-basis: 150px;
+    display: flex;
+    align-items: center;
   }
+  .logo-right {
+    justify-content: flex-start;
+  }
+  .logo-left {
+    justify-content: flex-end;
+  }
+
+  .official-print-header img {
+    height: 85px !important;
+    max-width: 150px !important;
+    object-fit: contain !important;
+    visibility: visible !important;
+  }
+
   .official-print-text {
-    text-align: left;
+    text-align: center; /* توسيط النص */
+    flex: 1; /* ليأخذ المساحة المتبقية بين الشعارين */
+    padding: 0 10px;
   }
   .official-print-text h1 {
     font-size: 1.3rem;
     font-weight: 800;
-    color: var(--primary-blue);
+    color: var(--primary-blue) !important;
     margin-bottom: 4px;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .official-print-text h2 {
     font-size: 1rem;
     font-weight: 700;
-    color: var(--gold-text);
+    color: var(--gold-text) !important;
     margin-bottom: 4px;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .official-print-text p {
     font-size: 0.85rem;
-    color: #444;
+    color: #444 !important;
+    margin: 0;
   }
 
   /* فك قيود حاوية الجدول (أهم خطوة لمنع القص الجانبي والعمودي) */
@@ -1156,5 +1186,53 @@ select.w-input {
     print-color-adjust: exact !important;
     margin-bottom: 10px;
     font-size: 1rem;
+  }
+}
+/* ========================================================================= */
+/* 🚀 إخفاء شعارات التقارير من الشاشة التفاعلية وإظهارها عند الطباعة بانتظام */
+/* ========================================================================= */
+
+/* 1. إخفاء الترويسة في الشاشة العادية لتوسيع مساحة العمل */
+.print-only-header {
+  display: none !important;
+}
+
+/* 2. إظهار الترويسة وضبطها على خط أفقي واحد وميزان واحد عند الطباعة */
+@media print {
+  .print-only-header {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important; /* منع التفاف السطر نهائياً */
+    width: 100% !important;
+    margin-bottom: 20px !important;
+    border-bottom: 2px solid #0f172a !important; /* خط فاصل رسمي أنيق */
+    padding-bottom: 15px !important;
+  }
+
+  /* تخصيص مساحة الشعار الأيمن */
+  .print-only-header .logo-right {
+    flex: 0 0 15% !important;
+    text-align: right !important;
+  }
+
+  /* تخصيص مساحة النص في المنتصف بالضبط */
+  .print-only-header .official-print-text {
+    flex: 1 !important;
+    text-align: center !important;
+  }
+
+  /* تخصيص مساحة الشعار الأيسر */
+  .print-only-header .logo-left {
+    flex: 0 0 15% !important;
+    text-align: left !important;
+  }
+
+  /* ضبط ارتفاع الشعارات ليكون متطابقاً ورسمياً */
+  .print-only-header img {
+    max-height: 75px !important;
+    width: auto !important;
+    object-fit: contain !important;
   }
 }
