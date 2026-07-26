@@ -125,7 +125,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return dayCount > 0 ? (dayCount > 23 ? 23 : dayCount) : 1;
   }
 
-  // إضافة المسار الجديد (الأربعون النووية) هنا
   const tracksDefinition = [
     {
       id: "t1",
@@ -162,7 +161,6 @@ document.addEventListener("DOMContentLoaded", () => {
     { id: "t8", name: "الأربعون النووية", totalDays: 23, totalHadiths: 42 },
   ];
 
-  // توزيع الأحاديث للمسار الجديد (19 يوم حفظ فعلي)
   const memArrays = {
     t1: [
       [1, 9],
@@ -408,6 +406,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // =================================================================================
+  // 🚀 المحرك الخلفي للإشعارات وطلب الصلاحيات (FCM)
+  // =================================================================================
   async function requestFCMToken(userObj, collection) {
     if (
       typeof firebase !== "undefined" &&
@@ -417,20 +418,39 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const messaging = firebase.messaging();
         const permission = await Notification.requestPermission();
+
         if (permission === "granted") {
+          const registration = await navigator.serviceWorker.register(
+            "/firebase-messaging-sw.js",
+          );
+
           const token = await messaging.getToken({
-            vapidKey: "YOUR_PUBLIC_VAPID_KEY_HERE",
+            vapidKey:
+              "BLDTgzOIzrk0LpHH2qIbkXo1KNnC8lkL58i36jwuaMT53LB-3z0i6H8wcSMVmSut0RmLN21d68fqNaQVox8vfeM", // ⚠️ هام: ضع مفتاح VAPID الحقيقي هنا
+            serviceWorkerRegistration: registration,
           });
+
           if (token && userObj.fcmToken !== token) {
             userObj.fcmToken = token;
             await syncToFirestore(collection, userObj.id, userObj);
+            console.log("تم تفعيل إشعارات الجوال لهذا المستخدم بنجاح.");
           }
+
+          messaging.onMessage((payload) => {
+            console.log("تم استلام إشعار والنظام مفتوح: ", payload);
+            const title = payload.notification?.title || "تنبيه جديد";
+            const body = payload.notification?.body || "لديك رسالة من الإدارة.";
+            alert(`🔔 ${title}\n\n${body}`);
+          });
+        } else {
+          console.warn("تم رفض صلاحية الإشعارات من قبل المستخدم.");
         }
       } catch (error) {
-        console.log("لم يتم تفعيل الإشعارات.", error);
+        console.log("تعذر تسجيل أو تفعيل الإشعارات الفورية:", error);
       }
     }
   }
+  // =================================================================================
 
   async function initDB() {
     try {
@@ -479,7 +499,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let isFirstSeed = false;
 
-      // التأسيس الذكي والآمن للمدراء الجدد
       if (loadedUsers.admin.length === 0) {
         const defaultAdmin = {
           id: "a1",
@@ -714,7 +733,6 @@ document.addEventListener("DOMContentLoaded", () => {
           ? "block"
           : "none";
 
-    // إخفاء كروت إضافة المعلمين عن المعلم مهما كانت صلاحياته
     if (document.getElementById("add-teacher-card"))
       document.getElementById("add-teacher-card").style.display = hasPermission(
         currentUser.role,
@@ -777,7 +795,6 @@ document.addEventListener("DOMContentLoaded", () => {
     loginPasswordGroup.style.display = "none";
     loginPasswordInput.disabled = true;
 
-    // إعادة حقل كلمة المرور لوضعه الطبيعي المغلق إذا قام بتغيير الحساب
     loginPasswordInput.type = "password";
     const toggleBtn = loginPasswordGroup.querySelector(".toggle-password-btn");
     if (toggleBtn) toggleBtn.innerHTML = eyeOpenSVG;
@@ -974,20 +991,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // =================================================================================
+  // 🚀 تم إخفاء شريط مقرر اليوم نهائياً كما طلبت وبشكل آمن جداً
+  // =================================================================================
   function updateTopBanner() {
     const banner = document.getElementById("daily-target-banner");
-    if (!banner) return;
-    const currentDay = getCurrentProgramDay();
-    const trackId = "t1";
-    banner.innerHTML = `
-      <div class="banner-header"><span class="daily-target-icon">📅</span> <strong>مقرر اليوم: ${getDateLabel(currentDay)}</strong></div>
-      <div class="banner-details" style="margin-top:5px;">
-        <div><strong>📖 حفظ:</strong> ${getTaskText(trackId, "mem", currentDay)}</div>
-        <div><strong>🔄 تثبيت:</strong> ${getTaskText(trackId, "cons", currentDay)}</div>
-        <div><strong>🔁 مراجعة:</strong> ${getTaskText(trackId, "rev", currentDay)}</div>
-      </div>
-    `;
+    if (banner) {
+      banner.style.display = "none"; // تم التعطيل هنا
+      banner.innerHTML = "";
+    }
   }
+  // =================================================================================
 
   function updateDashboardStats() {
     const dashGrid = document.getElementById("main-dashboard-grid");
@@ -1023,10 +1037,19 @@ document.addEventListener("DOMContentLoaded", () => {
         ? Math.round((totalProgress / (targetDay * 3 * students.length)) * 100)
         : 0;
     if (avgProgress > 100) avgProgress = 100;
+
+    const totalMemorizedHadiths = students.reduce((acc, s) => {
+      let highestMem = parseInt(s.manualProgress?.mem) || 0;
+      if (highestMem === 0 && s.detailedProgress?.mem?.length > 0) {
+        highestMem = Math.max(...s.detailedProgress.mem);
+      }
+      return acc + highestMem;
+    }, 0);
+
     if (isTeacher) {
-      dashGrid.innerHTML = `<div class="stat-card"><h3>طلاب حلقتي</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div>`;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>طلاب حلقتي</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div>`;
     } else {
-      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>`;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>`;
     }
   }
 
@@ -1093,7 +1116,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   }
-
   const stuTrackSelect = document.getElementById("stu-track");
   const stuCircleSelect = document.getElementById("stu-circle");
   if (stuTrackSelect && stuCircleSelect) {
@@ -1922,6 +1944,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("generate-report-btn")
     .addEventListener("click", generateReport);
+
   function generateReport() {
     const tbody = document.getElementById("reports-table-body");
     if (!tbody) return;
@@ -1946,6 +1969,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const dayRecords = window.db.dailyRecords.filter(
       (r) => r.date === dateInput,
     );
+
+    let totalReportHadiths = 0;
 
     studentsToReport.forEach((student) => {
       const record = dayRecords.find((r) => r.studentId === student.id);
@@ -1978,6 +2003,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (highestMem === 0 && student.detailedProgress?.mem?.length > 0) {
         highestMem = Math.max(...student.detailedProgress.mem);
       }
+
+      totalReportHadiths += highestMem;
+
       const totalHadithsStr = track.totalHadiths
         ? `${highestMem} من أصل ${track.totalHadiths}`
         : `${highestMem}`;
@@ -1996,6 +2024,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td style="font-weight:bold; color:var(--primary-blue);" dir="rtl">${totalHadithsStr}</td><td>${notesStr}</td></tr>`;
     });
+
+    if (studentsToReport.length > 0) {
+      tbody.innerHTML += `
+        <tr style="background-color: var(--primary-light); border-top: 2px solid var(--primary-blue);">
+          <td colspan="4" style="text-align: left; font-weight: 800; color: var(--primary-blue); font-size: 1rem; padding: 12px;">إجمالي الأحاديث المسمّعة للطلاب أعلاه:</td>
+          <td colspan="2" style="font-weight: 900; color: var(--danger-btn); font-size: 1.1rem; padding: 12px;">${totalReportHadiths} حديثاً</td>
+        </tr>`;
+    }
   }
 
   const searchInput = document.getElementById("student-search-input");
