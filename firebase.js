@@ -25,4 +25,19 @@ dbFirestore.enablePersistence().catch(function (err) {
   }
 });
 
+// تهيئة خدمة الإشعارات (Firebase Cloud Messaging) بأمان وبدون أي تعارض
+let messaging = null;
+if (
+  typeof firebase !== "undefined" &&
+  firebase.messaging &&
+  firebase.messaging.isSupported()
+) {
+  try {
+    messaging = firebase.messaging();
+    console.log("تم تفعيل محرك الإشعارات الفورية (FCM) بنجاح!");
+  } catch (error) {
+    console.warn("تعذر تفعيل خدمة الإشعارات في هذا المتصفح:", error);
+  }
+}
+
 console.log("تم تفعيل المحرك السحابي: النظام جاهز ومربوط بنجاح!");
