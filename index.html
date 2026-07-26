@@ -15,11 +15,7 @@
       ⚠️ انقطع الاتصال بالإنترنت! النظام يعمل الآن في وضع عدم الاتصال ويحفظ
       بياناتك محلياً بشكل آمن.
     </div>
-    <img
-      src="شعار برنامج حفظ السنة.jpg.jpeg"
-      class="print-watermark"
-      alt="Watermark"
-    />
+
     <div id="global-loader"><div class="spinner"></div></div>
 
     <div id="login-screen" class="wathbah-login-theme" style="display: none">
@@ -47,7 +43,6 @@
             id="login-password-group"
             style="display: none"
           >
-            <!-- تمت إضافة العين الشفافة هنا -->
             <div class="password-wrapper">
               <input
                 type="password"
@@ -224,7 +219,6 @@
             📬 صندوق الرسائل
           </button>
 
-          <!-- زر الإشعارات تمت إضافته هنا -->
           <button
             class="nav-btn"
             data-target="push-notifications"
@@ -335,7 +329,6 @@
           ></div>
         </div>
 
-        <!-- شاشة إرسال الإشعارات الفورية -->
         <div id="push-notifications" class="app-section">
           <div class="top-page-header">
             <div></div>
@@ -491,7 +484,6 @@
                     required
                   />
                 </div>
-                <!-- تم جعل الهوية اختيارية ورقم الجوال أساسي -->
                 <div style="display: flex; gap: 10px">
                   <div class="input-group" style="flex: 1">
                     <input
@@ -511,7 +503,6 @@
                     />
                   </div>
                 </div>
-                <!-- العين للرقم السري للطالب -->
                 <div class="input-group">
                   <div class="password-wrapper">
                     <input
@@ -577,7 +568,6 @@
                     required
                   />
                 </div>
-                <!-- إضافة رقم الجوال للمعلم -->
                 <div class="input-group">
                   <input
                     type="tel"
@@ -587,7 +577,6 @@
                     required
                   />
                 </div>
-                <!-- العين للرقم السري للمعلم -->
                 <div class="input-group">
                   <div class="password-wrapper">
                     <input
@@ -639,7 +628,6 @@
                     required
                   />
                 </div>
-                <!-- العين للرقم السري للمشرف -->
                 <div class="input-group">
                   <div class="password-wrapper">
                     <input
@@ -939,23 +927,34 @@
         </div>
 
         <div id="reports" class="app-section">
-          <div class="official-print-header">
-            <div>
-              <img
-                src="شعار برنامج حفظ السنة.jpg.jpeg"
-                alt="شعار برنامج حفظ السنة"
-              />
+          <!-- الترويسة الرسمية لإظهار الشعارين في الطباعة -->
+          <div class="print-print-header print-only-header">
+            <div class="logo-right">
+              <img src="logo1.png" alt="شعار جمعية الدعوة بأبها" />
             </div>
             <div class="official-print-text">
               <h1>جمعية الدعوة والإرشاد وتوعية الجاليات</h1>
-              <h2>برنامج حفظ السنة</h2>
-              <p>تقرير إنجاز ومتابعة الطلاب اليومي</p>
+              <h2>المملكة العربية السعودية</h2>
+              <p>
+                تاريخ الطباعة: <span id="print-date">--</span> | الوقت:
+                <span id="print-time">--</span>
+              </p>
+            </div>
+            <div class="logo-left">
+              <img src="logo2.png" alt="شعار برنامج حفظ السنة" />
             </div>
           </div>
           <div class="top-page-header print-hide">
             <button
               class="btn-submit print-hide"
-              onclick="window.print()"
+              onclick="
+                const d = new Date();
+                document.getElementById('print-date').innerText =
+                  d.toLocaleDateString('en-GB');
+                document.getElementById('print-time').innerText =
+                  d.toLocaleTimeString('ar-SA');
+                window.print();
+              "
               style="width: auto; margin: 0"
             >
               🖨️ طباعة التقرير (رسمي)
@@ -1040,7 +1039,6 @@
             <div class="content-card">
               <h3 class="content-card-title">إعدادات الحساب</h3>
               <form id="password-change-form">
-                <!-- العين للرقم السري الجديد -->
                 <div class="input-group">
                   <label>تغيير الرقم السري</label>
                   <div class="password-wrapper">
