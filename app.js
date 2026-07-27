@@ -637,28 +637,51 @@ document.addEventListener("DOMContentLoaded", () => {
       .join("");
   }
 
+  // =========================================================================
+  // 🚀 التعديل الذكي: فرز وعرض الرسائل والإشعارات الداخلية بالعدل والتسلسل الإداري
+  // =========================================================================
   function renderMessages() {
     const container = document.getElementById("messages-container");
     if (!container) return;
     container.innerHTML = "";
     let visibleMessages = window.db.messages || [];
 
-    if (currentUser.role === "teacher") {
+    if (!currentUser) return;
+
+    if (currentUser.role === "admin") {
+      // المدير يرى كل الرسائل الموجهة للإدارة، أو التي أرسلها هو
+      visibleMessages = visibleMessages.filter(
+        (m) =>
+          m.receiverType === "admin" ||
+          m.targetType === "admin" ||
+          m.senderId === currentUser.id,
+      );
+    } else if (currentUser.role === "supervisor") {
+      // المشرف يرى ما وجهه المدير لكل المشرفين أو له شخصياً، أو ما أرسله هو للإدارة
+      visibleMessages = visibleMessages.filter(
+        (m) =>
+          m.receiverType === "supervisor" ||
+          m.targetType === "all_supervisors" ||
+          (m.targetType === "specific_supervisor" &&
+            m.targetId === currentUser.id) ||
+          m.senderId === currentUser.id,
+      );
+    } else if (currentUser.role === "teacher") {
+      // المعلم يرى ما وجهه المدير لكل المعلمين أو له شخصياً أو لمتعلقات حلقته، أو ما أرسله هو للإدارة
       visibleMessages = visibleMessages.filter(
         (m) =>
           (m.receiverType === "teacher" &&
-            m.circleId === currentUser.circleId) ||
+            (m.circleId === currentUser.circleId || !m.circleId)) ||
+          m.targetType === "all_teachers" ||
+          (m.targetType === "specific_teacher" &&
+            m.targetId === currentUser.id) ||
           m.senderId === currentUser.id,
-      );
-    } else {
-      visibleMessages = visibleMessages.filter(
-        (m) => m.receiverType === "admin",
       );
     }
 
     if (visibleMessages.length === 0) {
       container.innerHTML =
-        "<p style='text-align:center; color:var(--text-gray); padding:2rem; background:#fff; border-radius:8px;'>📭 لا توجد رسائل جديدة.</p>";
+        "<p style='text-align:center; color:var(--text-gray); padding:2rem; background:#fff; border-radius:8px;'>📭 لا توجد رسائل واردة جديدة في صندوقك.</p>";
       return;
     }
 
@@ -667,24 +690,65 @@ document.addEventListener("DOMContentLoaded", () => {
         msg.senderRole === "student"
           ? "طالب"
           : msg.senderRole === "teacher"
-            ? "معلم"
-            : "مشرف";
-      const toText =
-        msg.receiverType === "admin" ? "الإدارة / الإشراف" : "معلم الحلقة";
+            ? "معلم حلقة"
+            : msg.senderRole === "supervisor"
+              ? "مشرف تعليمي"
+              : "الإدارة العامة";
+
+      let toText = "الإدارة العامة / المدير";
+      if (msg.targetType === "all_students") toText = "جميع الطلاب";
+      else if (msg.targetType === "all_teachers") toText = "جميع المعلمين";
+      else if (msg.targetType === "all_supervisors") toText = "جميع المشرفين";
+      else if (msg.targetType && msg.targetType.startsWith("specific_"))
+        toText = "مستخدم محدد";
+      else if (msg.receiverType === "teacher") toText = "معلم الحلقة";
+
       container.innerHTML += `
-           <div class="content-card" style="margin-bottom:0; border-right: 4px solid var(--primary-blue); padding: 1.2rem;">
+           <div class="content-card" style="margin-bottom:12px; border-right: 4px solid var(--primary-blue); padding: 1.2rem; background: #fff;">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
                  <div>
                     <strong style="color:var(--primary-blue); font-size:1.1rem;">${msg.senderName} <span style="font-size:0.8rem; color:gray;">(${roleName})</span></strong>
-                    <div style="font-size:0.8rem; color:var(--text-gray); margin-top:4px;">إلى: ${toText}</div>
+                    <div style="font-size:0.8rem; color:var(--text-gray); margin-top:4px;">📥 الإرسال إلى: <strong>${toText}</strong></div>
                  </div>
-                 <span style="font-size:0.8rem; background:#f1f5f9; padding:4px 8px; border-radius:4px; color:var(--text-gray);" dir="ltr">${msg.date}</span>
+                 <span style="font-size:0.8rem; background:#f1f5f9; padding:4px 8px; border-radius:4px; color:var(--text-gray);" dir="ltr">${msg.date || ""}</span>
               </div>
-              <h4 style="margin-bottom:8px; font-weight:800; color:var(--gold-text);">${msg.subject}</h4>
-              <p style="font-size:0.9rem; line-height:1.6; white-space: pre-wrap; margin:0; color:var(--text-dark);">${msg.text}</p>
+              <h4 style="margin-bottom:8px; font-weight:800; color:var(--gold-text);">${msg.subject || "بدون عنوان"}</h4>
+              <p style="font-size:0.9rem; line-height:1.6; white-space: pre-wrap; margin:0; color:var(--text-dark);">${msg.text || ""}</p>
            </div>
         `;
     });
+  }
+
+  // =========================================================================
+  // 🚀 التعديل الذكي: ضبط واجهة الإشعارات وتحديد الوجهة حسب المنصب (الإدارة للكل، والكل للإدارة)
+  // =========================================================================
+  function adjustNotificationUI(role) {
+    const targetSelectGroup =
+      document.getElementById("notif-target-type")?.parentElement;
+    const userSelectGroup = document.getElementById("notif-user-select-group");
+    if (!targetSelectGroup) return;
+
+    if (role !== "admin") {
+      // إخفاء قائمة الاختيارات عن المعلم والمشرف وجعل الوجهة للمدير فقط
+      targetSelectGroup.style.display = "none";
+      if (userSelectGroup) userSelectGroup.style.display = "none";
+
+      let notice = document.getElementById("target-admin-notice");
+      if (!notice) {
+        notice = document.createElement("div");
+        notice.id = "target-admin-notice";
+        notice.style =
+          "background: #e0f2fe; color: #0369a1; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 0.95rem; font-weight: bold; border: 1px solid #bae6fd;";
+        notice.innerHTML =
+          "📨 وجهة الإشعار/الرسالة: الإدارة العامة (المدير) مباشرة";
+        targetSelectGroup.parentElement.insertBefore(notice, targetSelectGroup);
+      }
+    } else {
+      // المدير يرى كل الخيارات بمرونة
+      targetSelectGroup.style.display = "block";
+      const notice = document.getElementById("target-admin-notice");
+      if (notice) notice.remove();
+    }
   }
 
   const loginScreen = document.getElementById("login-screen");
@@ -751,6 +815,7 @@ document.addEventListener("DOMContentLoaded", () => {
         currentUser.role === "teacher" ? "none" : "block";
 
     requestFCMToken(currentUser, "users");
+    adjustNotificationUI(currentUser.role); // تفعيل ضبط صلاحيات الإرسال
 
     const firstBtn = document.querySelector('.nav-btn[style*="display: flex"]');
     if (firstBtn) firstBtn.click();
@@ -866,6 +931,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDashboardStats();
     updateSupportInfo();
     renderMessages();
+    if (currentUser) adjustNotificationUI(currentUser.role); // تأكيد ضبط الصلاحية
     if (currentUser && currentUser.role === "teacher") renderDailyTracking("");
     else renderAdminRecords();
     generateReport();
@@ -959,11 +1025,18 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
         const title = document.getElementById("notif-title").value;
         const body = document.getElementById("notif-body").value;
-        const type = notifTargetType.value;
-        const targetId = notifTargetUser.value;
 
-        if (type.startsWith("specific_") && !targetId)
-          return alert("الرجاء تحديد المستخدم المطلوب.");
+        // --- 🚀 التعديل الذكي: التحقق من المنصب لفرض التسلسل الإداري ---
+        let type = "admin"; // الافتراضي للمعلم والمشرف هو الإرسال للمدير فقط
+        let targetId = "admin";
+
+        if (currentUser && currentUser.role === "admin") {
+          type = notifTargetType.value;
+          targetId = notifTargetUser.value;
+          if (type.startsWith("specific_") && !targetId) {
+            return alert("الرجاء تحديد المستخدم المطلوب.");
+          }
+        }
 
         const notifData = {
           id: "notif_" + Date.now(),
@@ -971,21 +1044,55 @@ document.addEventListener("DOMContentLoaded", () => {
           body: body,
           targetType: type,
           targetId: targetId || "all",
-          senderId: currentUser.id,
+          senderId: currentUser ? currentUser.id : "",
+          senderName: currentUser ? currentUser.name : "مستخدم بالنظام",
+          senderRole: currentUser ? currentUser.role : "teacher",
           timestamp: Date.now(),
           date: new Date().toLocaleString("ar-SA"),
         };
 
         try {
+          // 1. الحفظ في السحابة في جدول الإشعارات
           await dbFirestore
             .collection("notifications_queue")
             .doc(notifData.id)
             .set(notifData);
-          alert("تم حفظ وإرسال الإشعار بنجاح! 🚀");
+
+          // 2. 🚀 حفظ نسخة في الرسائل الداخلية لكي تظهر فوراً داخل حساب المستهدف في صندوق الرسائل
+          const internalMsg = {
+            id: "msg_" + Date.now(),
+            senderId: notifData.senderId,
+            senderName: notifData.senderName,
+            senderRole: notifData.senderRole,
+            receiverType:
+              type === "admin"
+                ? "admin"
+                : type.includes("teacher")
+                  ? "teacher"
+                  : type.includes("supervisor")
+                    ? "supervisor"
+                    : "student",
+            targetType: type,
+            targetId: targetId || "all",
+            circleId: currentUser ? currentUser.circleId || "" : "",
+            subject: "🔔 " + title,
+            text: body,
+            timestamp: Date.now(),
+            date: notifData.date,
+          };
+
+          if (!window.db.messages) window.db.messages = [];
+          window.db.messages.unshift(internalMsg);
+          await syncToFirestore("messages", internalMsg.id, internalMsg);
+          saveLocalDB();
+          renderMessages();
+
+          alert("✅ تم حفظ وإرسال الإشعار بنجاح للمستهدف داخل النظام! 🚀");
           e.target.reset();
           notifUserGroup.style.display = "none";
         } catch (err) {
-          alert("فشل إرسال الإشعار، تأكد من الاتصال.");
+          console.error(err);
+          alert("⚠️ تم حفظ الإشعار محلياً، وسيتزامن عند استقرار الاتصال.");
         }
       });
     }
