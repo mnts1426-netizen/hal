@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // أيقونات العين الرسمية (مفتوحة ومغلقة)
   const eyeOpenSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
-  const eyeClosedSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`;
+  const eyeClosedSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`;
 
   // --- تفعيل زر عرض/إخفاء الرقم السري (👁️) بدون الإيموجي ---
   document.addEventListener("click", function (e) {
@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
       PERMISSIONS.VIEW_DASHBOARD,
       PERMISSIONS.VIEW_REPORTS,
       PERMISSIONS.MANAGE_SETTINGS,
-      PERMISSIONS.MANAGE_STUDENTS, // إتاحة إضافة الطلاب للمعلم
+      PERMISSIONS.MANAGE_STUDENTS,
     ],
   };
 
@@ -177,11 +177,11 @@ document.addEventListener("DOMContentLoaded", () => {
       [398, 440],
       [441, 489],
       [490, 531],
-      [532, 583], // 👈 نهاية الأسبوع الثالث
-      [584, 628], // 👈 الأحد (تكامل مباشر من 584)
-      [629, 673], // 👈 الإثنين
-      [674, 718], // 👈 الثلاثاء
-      [719, 763], // 👈
+      [532, 583],
+      [584, 628],
+      [629, 673],
+      [674, 718],
+      [729, 763],
     ],
     t2: [
       [1, 18],
@@ -406,9 +406,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // =================================================================================
-  // 🚀 المحرك الخلفي للإشعارات وطلب الصلاحيات (FCM)
-  // =================================================================================
   async function requestFCMToken(userObj, collection) {
     if (
       typeof firebase !== "undefined" &&
@@ -426,7 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           const token = await messaging.getToken({
             vapidKey:
-              "BLDTgzOIzrk0LpHH2qIbkXo1KNnC8lkL58i36jwuaMT53LB-3z0i6H8wcSMVmSut0RmLN21d68fqNaQVox8vfeM", // ⚠️ هام: ضع مفتاح VAPID الحقيقي هنا
+              "BLDTgzOIzrk0LpHH2qIbkXo1KNnC8lkL58i36jwuaMT53LB-3z0i6H8wcSMVmSut0RmLN21d68fqNaQVox8vfeM",
             serviceWorkerRegistration: registration,
           });
 
@@ -450,7 +447,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   }
-  // =================================================================================
 
   async function initDB() {
     try {
@@ -637,9 +633,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .join("");
   }
 
-  // =========================================================================
-  // 🚀 التعديل الذكي: فرز وعرض الرسائل والإشعارات الداخلية بالعدل والتسلسل الإداري
-  // =========================================================================
   function renderMessages() {
     const container = document.getElementById("messages-container");
     if (!container) return;
@@ -649,7 +642,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentUser) return;
 
     if (currentUser.role === "admin") {
-      // المدير يرى كل الرسائل الموجهة للإدارة، أو التي أرسلها هو
       visibleMessages = visibleMessages.filter(
         (m) =>
           m.receiverType === "admin" ||
@@ -657,7 +649,6 @@ document.addEventListener("DOMContentLoaded", () => {
           m.senderId === currentUser.id,
       );
     } else if (currentUser.role === "supervisor") {
-      // المشرف يرى ما وجهه المدير لكل المشرفين أو له شخصياً، أو ما أرسله هو للإدارة
       visibleMessages = visibleMessages.filter(
         (m) =>
           m.receiverType === "supervisor" ||
@@ -667,7 +658,6 @@ document.addEventListener("DOMContentLoaded", () => {
           m.senderId === currentUser.id,
       );
     } else if (currentUser.role === "teacher") {
-      // المعلم يرى ما وجهه المدير لكل المعلمين أو له شخصياً أو لمتعلقات حلقته، أو ما أرسله هو للإدارة
       visibleMessages = visibleMessages.filter(
         (m) =>
           (m.receiverType === "teacher" &&
@@ -719,9 +709,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // =========================================================================
-  // 🚀 التعديل الذكي: ضبط واجهة الإشعارات وتحديد الوجهة حسب المنصب (الإدارة للكل، والكل للإدارة)
-  // =========================================================================
   function adjustNotificationUI(role) {
     const targetSelectGroup =
       document.getElementById("notif-target-type")?.parentElement;
@@ -729,7 +716,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!targetSelectGroup) return;
 
     if (role !== "admin") {
-      // إخفاء قائمة الاختيارات عن المعلم والمشرف وجعل الوجهة للمدير فقط
       targetSelectGroup.style.display = "none";
       if (userSelectGroup) userSelectGroup.style.display = "none";
 
@@ -744,7 +730,6 @@ document.addEventListener("DOMContentLoaded", () => {
         targetSelectGroup.parentElement.insertBefore(notice, targetSelectGroup);
       }
     } else {
-      // المدير يرى كل الخيارات بمرونة
       targetSelectGroup.style.display = "block";
       const notice = document.getElementById("target-admin-notice");
       if (notice) notice.remove();
@@ -815,7 +800,7 @@ document.addEventListener("DOMContentLoaded", () => {
         currentUser.role === "teacher" ? "none" : "block";
 
     requestFCMToken(currentUser, "users");
-    adjustNotificationUI(currentUser.role); // تفعيل ضبط صلاحيات الإرسال
+    adjustNotificationUI(currentUser.role);
 
     const firstBtn = document.querySelector('.nav-btn[style*="display: flex"]');
     if (firstBtn) firstBtn.click();
@@ -931,7 +916,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDashboardStats();
     updateSupportInfo();
     renderMessages();
-    if (currentUser) adjustNotificationUI(currentUser.role); // تأكيد ضبط الصلاحية
+    if (currentUser) adjustNotificationUI(currentUser.role);
     if (currentUser && currentUser.role === "teacher") renderDailyTracking("");
     else renderAdminRecords();
     generateReport();
@@ -1026,8 +1011,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const title = document.getElementById("notif-title").value;
         const body = document.getElementById("notif-body").value;
 
-        // --- 🚀 التعديل الذكي: التحقق من المنصب لفرض التسلسل الإداري ---
-        let type = "admin"; // الافتراضي للمعلم والمشرف هو الإرسال للمدير فقط
+        let type = "admin";
         let targetId = "admin";
 
         if (currentUser && currentUser.role === "admin") {
@@ -1052,13 +1036,11 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         try {
-          // 1. الحفظ في السحابة في جدول الإشعارات
           await dbFirestore
             .collection("notifications_queue")
             .doc(notifData.id)
             .set(notifData);
 
-          // 2. 🚀 حفظ نسخة في الرسائل الداخلية لكي تظهر فوراً داخل حساب المستهدف في صندوق الرسائل
           const internalMsg = {
             id: "msg_" + Date.now(),
             senderId: notifData.senderId,
@@ -1098,17 +1080,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // =================================================================================
-  // 🚀 تم إخفاء شريط مقرر اليوم نهائياً كما طلبت وبشكل آمن جداً
-  // =================================================================================
   function updateTopBanner() {
     const banner = document.getElementById("daily-target-banner");
     if (banner) {
-      banner.style.display = "none"; // تم التعطيل هنا
+      banner.style.display = "none";
       banner.innerHTML = "";
     }
   }
-  // =================================================================================
 
   function updateDashboardStats() {
     const dashGrid = document.getElementById("main-dashboard-grid");
@@ -1148,7 +1126,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const totalMemorizedHadiths = students.reduce((acc, s) => {
       let highestMem = parseInt(s.manualProgress?.mem) || 0;
       if (highestMem === 0 && s.detailedProgress?.mem?.length > 0) {
-        highestMem = Math.max(...s.detailedProgress.mem);
+        highestMem = Math.max(...student.detailedProgress.mem);
       }
       return acc + highestMem;
     }, 0);
@@ -1978,6 +1956,9 @@ document.addEventListener("DOMContentLoaded", () => {
         totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       if (progressPercent > 100) progressPercent = 100;
 
+      // 👈 احتساب أيام التسميع والإنجاز الفعلي للطالب مباشرة ومجرداً
+      const attendedMemorizedDays = student.progress?.mem?.length || 0;
+
       const selectHtml = `
         <select class="modern-input" style="padding: 0.3rem; min-height: auto; font-size:0.8rem;" onchange="adminUpdateAttendance('${student.id}', this.value)">
           <option value="" disabled ${!record ? "selected" : ""}>لم يحضر</option>
@@ -1993,6 +1974,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td style="font-weight:700;">${student.name}</td><td>${student.level}</td>
           <td><span style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">${track.name}</span></td>
           <td style="color:${circle.name === "غير موزع" ? "var(--danger-btn)" : "inherit"}">${circle.name}</td>
+          <td style="font-weight:bold; color:var(--primary-blue); text-align:center;">${attendedMemorizedDays}</td>
           <td style="color:${attendancePercent >= 80 ? "#166534" : "#991b1b"}; font-weight:bold;" dir="ltr">${attendancePercent}%</td>
           <td style="color:var(--primary-blue); font-weight:bold;" dir="ltr">${progressPercent}%</td>
           <td>${selectHtml}</td>
@@ -2106,6 +2088,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
+      // 👈 احتساب أيام التسميع والإنجاز الفعلي للطالب مباشرة ومجرداً
+      const attendedMemorizedDays = student.progress?.mem?.length || 0;
+
       let highestMem = parseInt(student.manualProgress?.mem) || 0;
       if (highestMem === 0 && student.detailedProgress?.mem?.length > 0) {
         highestMem = Math.max(...student.detailedProgress.mem);
@@ -2129,13 +2114,21 @@ document.addEventListener("DOMContentLoaded", () => {
         : "لا يوجد إنجاز جديد";
       const notesStr = record && record.notes ? record.notes : "-";
 
-      tbody.innerHTML += `<tr><td style="font-weight:700;">${student.name}</td><td>${circle.name}</td><td style="color:${attColor}; font-weight:bold;">${attText}</td><td style="font-size:0.8rem;">${tasksCompleted}</td><td style="font-weight:bold; color:var(--primary-blue);" dir="rtl">${totalHadithsStr}</td><td>${notesStr}</td></tr>`;
+      tbody.innerHTML += `<tr>
+        <td style="font-weight:700;">${student.name}</td>
+        <td>${circle.name}</td>
+        <td style="color:${attColor}; font-weight:bold;">${attText}</td>
+        <td style="font-weight:bold; color:var(--primary-blue); text-align:center;">${attendedMemorizedDays}</td>
+        <td style="font-size:0.8rem;">${tasksCompleted}</td>
+        <td style="font-weight:bold; color:var(--primary-blue);" dir="rtl">${totalHadithsStr}</td>
+        <td>${notesStr}</td>
+      </tr>`;
     });
 
     if (studentsToReport.length > 0) {
       tbody.innerHTML += `
         <tr style="background-color: var(--primary-light); border-top: 2px solid var(--primary-blue);">
-          <td colspan="4" style="text-align: left; font-weight: 800; color: var(--primary-blue); font-size: 1rem; padding: 12px;">إجمالي الأحاديث المسمّعة للطلاب أعلاه:</td>
+          <td colspan="5" style="text-align: left; font-weight: 800; color: var(--primary-blue); font-size: 1rem; padding: 12px;">إجمالي الأحاديث المسمّعة للطلاب أعلاه:</td>
           <td colspan="2" style="font-weight: 900; color: var(--danger-btn); font-size: 1.1rem; padding: 12px;">${totalReportHadiths} حديثاً</td>
         </tr>`;
     }
