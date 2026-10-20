@@ -295,6 +295,11 @@
                 🔄 تبديل وضع التسميع للجميع (شريط/دقيق)
               </button>
             </div>
+            <select
+              id="tracking-circle-filter"
+              class="modern-input"
+              style="display: none; border-width: 2px; width: 220px; max-width: 100%"
+            ></select>
             <input
               type="text"
               id="student-search-input"
@@ -550,6 +555,46 @@
                   حفظ وتوزيع الطالب
                 </button>
               </form>
+              <div
+                style="
+                  border-top: 1px dashed var(--border-color);
+                  margin-top: 1.2rem;
+                  padding-top: 1rem;
+                "
+              >
+                <p
+                  style="
+                    font-size: 0.85rem;
+                    font-weight: 700;
+                    color: var(--primary-blue);
+                    margin-bottom: 8px;
+                  "
+                >
+                  إضافة مجموعة طلاب من ملف Excel:
+                </p>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                  <button
+                    type="button"
+                    class="btn-action"
+                    id="import-students-btn"
+                  >
+                    📥 استيراد من Excel
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-action"
+                    id="download-template-btn"
+                  >
+                    📄 تحميل نموذج Excel
+                  </button>
+                </div>
+                <input
+                  type="file"
+                  id="import-students-file"
+                  accept=".xlsx,.xls,.csv"
+                  style="display: none"
+                />
+              </div>
             </div>
 
             <div
@@ -1216,6 +1261,61 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="import-modal" class="modal-overlay">
+      <div class="modal-content" style="max-width: 1000px">
+        <h2 style="margin-bottom: 0.5rem; color: var(--primary-blue)">
+          مراجعة الطلاب قبل الحفظ
+        </h2>
+        <p
+          id="import-summary"
+          style="font-size: 0.9rem; margin-bottom: 1rem; line-height: 1.8"
+        ></p>
+        <div
+          style="
+            max-height: 55vh;
+            overflow: auto;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+          "
+        >
+          <table class="modern-table">
+            <thead>
+              <tr>
+                <th>صف</th>
+                <th>الاسم</th>
+                <th>الجوال</th>
+                <th>الهوية</th>
+                <th>المرحلة</th>
+                <th>المسار</th>
+                <th>الحلقة</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody id="import-preview-body"></tbody>
+          </table>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <button
+            type="button"
+            class="btn-submit"
+            id="import-confirm-btn"
+            style="margin: 0; width: auto; padding: 0.8rem 2rem"
+          >
+            حفظ الطلاب
+          </button>
+          <button
+            type="button"
+            class="btn-action"
+            onclick="closeImportModal()"
+            style="margin: 0"
+          >
+            إلغاء
+          </button>
+        </div>
       </div>
     </div>
 

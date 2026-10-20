@@ -37,6 +37,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // 7. المسارات والمقررات (ما يضيفه أو يعدّله المدير)
+    match /tracks/{document=**} {
+      allow read, write: if true;
+    }
+
     // إغلاق أي جداول أخرى غير مستخدمة لحماية قاعدة البيانات
     match /{document=**} {
       allow read, write: if false;

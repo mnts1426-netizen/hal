@@ -84,10 +84,10 @@ document.addEventListener("DOMContentLoaded", () => {
       [441, 489],
       [490, 531],
       [532, 583],
-      [584, 615],
-      [616, 651],
-      [652, 690],
-      [691, 729],
+      [584, 628],
+      [629, 673],
+      [674, 718],
+      [729, 763],
     ],
     t2: [
       [1, 18],
@@ -294,6 +294,27 @@ document.addEventListener("DOMContentLoaded", () => {
     return dayCount > 0 ? (dayCount > 23 ? 23 : dayCount) : 1;
   }
 
+  // جلب مسار الطالب من قاعدة البيانات (إن كان المدير أضافه أو عدّل اسمه أو مقرراته)
+  async function loadTrackFromDB(trackId) {
+    if (!trackId || typeof dbFirestore === "undefined") return;
+    try {
+      const doc = await dbFirestore.collection("tracks").doc(trackId).get();
+      if (!doc.exists) return;
+      const data = doc.data();
+      let t = tracksDefinition.find((x) => x.id === trackId);
+      if (!t) {
+        t = { id: trackId, name: "", totalDays: 23 };
+        tracksDefinition.push(t);
+      }
+      if (data.name) t.name = data.name;
+      if (data.totalDays) t.totalDays = data.totalDays;
+      if (Array.isArray(data.schedule) && data.schedule.length > 0)
+        scheduleData[trackId] = data.schedule;
+    } catch (e) {
+      console.warn("تعذر جلب المسار من قاعدة البيانات:", e);
+    }
+  }
+
   function getTaskText(trackId, taskType, dayIndex) {
     if (dayIndex <= 0) return "لا يوجد";
     const sched = scheduleData[trackId];
@@ -473,6 +494,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("st-name").textContent =
       `أهلاً بك، ${currentStudent.name.split(" ")[0]}`;
 
+    await loadTrackFromDB(currentStudent.trackId);
     const trackInfo = tracksDefinition.find(
       (t) => t.id === currentStudent.trackId,
     );
