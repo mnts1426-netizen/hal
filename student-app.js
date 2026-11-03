@@ -296,7 +296,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // جلب مسار الطالب من قاعدة البيانات (إن كان المدير أضافه أو عدّل اسمه أو مقرراته)
   async function loadTrackFromDB(trackId) {
-    if (!trackId || typeof dbFirestore === "undefined") return;
+    if (!trackId) return;
+    const plan = (window.TERM_PLANS || []).find((p) => p.id === trackId);
+    if (plan && !tracksDefinition.find((x) => x.id === trackId)) {
+      tracksDefinition.push({
+        id: plan.id,
+        name: plan.name,
+        totalDays: plan.totalDays,
+        startDate: plan.startDate,
+        programId: TERM,
+      });
+      scheduleData[plan.id] = plan.schedule;
+    }
+    if (typeof dbFirestore === "undefined") return;
     try {
       const doc = await dbFirestore.collection("tracks").doc(trackId).get();
       if (!doc.exists) return;
@@ -308,6 +320,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (data.name) t.name = data.name;
       if (data.totalDays) t.totalDays = data.totalDays;
+      if (data.startDate) t.startDate = data.startDate;
+      if (data.programId) t.programId = data.programId;
       if (Array.isArray(data.schedule) && data.schedule.length > 0)
         scheduleData[trackId] = data.schedule;
     } catch (e) {
@@ -322,6 +336,149 @@ document.addEventListener("DOMContentLoaded", () => {
     return `مقرر ${getDateLabel(dayIndex)}`;
   }
 
+  // ================= الدورة الفصل الأول 1448 =================
+  // بوابة الطلاب لطلاب الفصل الأول فقط، وطلاب الدورة الصيفية لا يدخلون
+  const TERM = "term1_1448";
+  const TERM_NAME = "الدورة الفصل الأول 1448";
+  const isTermStudent = () =>
+    !!currentStudent && currentStudent.programId === TERM;
+
+  // أيام الخطة (الأحد إلى الأربعاء) تُسمَّع في جلسات الجمعة والسبت
+  const TERM_SLOTS = [
+    { plan: "الأحد", session: "فجر الجمعة", offset: 0, dueHour: 12 },
+    { plan: "الإثنين", session: "عصر الجمعة", offset: 0, dueHour: 18 },
+    { plan: "الثلاثاء", session: "فجر السبت", offset: 1, dueHour: 12 },
+    { plan: "الأربعاء", session: "عصر السبت", offset: 1, dueHour: 18 },
+  ];
+
+  function parseIsoDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+
+  function toIsoDate(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  function hijriDayMonth(d) {
+    try {
+      return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+        day: "numeric",
+        month: "long",
+      }).format(d);
+    } catch (e) {
+      return d.toLocaleDateString("ar-SA");
+    }
+  }
+
+  function termSessionDate(track, day) {
+    const first = parseIsoDate(track && track.startDate);
+    if (!first || day < 1) return null;
+    while (first.getDay() !== 5) first.setDate(first.getDate() + 1);
+    const slot = TERM_SLOTS[(day - 1) % 4];
+    first.setDate(first.getDate() + Math.floor((day - 1) / 4) * 7 + slot.offset);
+    return first;
+  }
+
+  function termDayLabel(track, day) {
+    const slot = TERM_SLOTS[(day - 1) % 4];
+    const week = Math.floor((day - 1) / 4) + 1;
+    const d = termSessionDate(track, day);
+    return `الأسبوع ${week} - ${slot.plan} (${slot.session}${d ? " " + hijriDayMonth(d) : ""})`;
+  }
+
+  function termDueCount(track) {
+    if (!track || !track.startDate) return 0;
+    const now = new Date();
+    let n = 0;
+    for (let day = 1; day <= (track.totalDays || 0); day++) {
+      const d = termSessionDate(track, day);
+      d.setHours(TERM_SLOTS[(day - 1) % 4].dueHour, 0, 0, 0);
+      if (now < d) break;
+      n++;
+    }
+    return n;
+  }
+
+  function termDueDates(track) {
+    const dates = new Set();
+    for (let day = 1; day <= termDueCount(track); day++)
+      dates.add(toIsoDate(termSessionDate(track, day)));
+    return dates.size;
+  }
+
+  function toLatinDigits(v) {
+    return String(v == null ? "" : v)
+      .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+      .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
+  }
+
+  function extractMaxNum(text) {
+    const m = /ح\s*(\d+)\s*إلى\s*(\d+)/.exec(toLatinDigits(text || ""));
+    if (m) return Number(m[2]);
+    if (!text || text.includes("لا يوجد") || text.includes("مراجعة")) return 0;
+    const nums = toLatinDigits(text).match(/\d+/g);
+    return nums ? Math.max(...nums.map(Number)) : 0;
+  }
+
+  function reachedHadith(student, type) {
+    let n = parseInt(student.manualProgress?.[type]) || 0;
+    (student.detailedProgress?.[type] || []).forEach((h) => {
+      if (h > n) n = h;
+    });
+    (student.progress?.[type] || []).forEach((day) => {
+      const t = extractMaxNum(getTaskText(student.trackId, type, day));
+      if (t > n) n = t;
+    });
+    return n;
+  }
+
+  // المواكبة على الحفظ فقط: عدد الجلسات المنتهية التي لم يصل الطالب لمقرر حفظها
+  function termMemBehind(student, track) {
+    const due = termDueCount(track);
+    const reached = reachedHadith(student, "mem");
+    let behind = 0;
+    for (let day = 1; day <= due; day++) {
+      // جلسات المراجعة والاختبار ليس فيها حفظ جديد فلا تُحسب
+      const target = extractMaxNum(getTaskText(track.id, "mem", day) || "");
+      if (target > 0 && reached < target) behind++;
+    }
+    return behind;
+  }
+
+  function isTermTaskDone(student, type, day) {
+    if ((student.progress?.[type] || []).includes(day)) return true;
+    const target = extractMaxNum(getTaskText(student.trackId, type, day));
+    return target > 0 && reachedHadith(student, type) >= target;
+  }
+
+  function formatRecitedAt(ts) {
+    const d = new Date(ts);
+    const day = d.toLocaleDateString("ar-SA", { weekday: "long" });
+    const time = d.toLocaleTimeString("ar-SA-u-nu-latn", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `${day} ${hijriDayMonth(d)} - ${time}`;
+  }
+
+  function sessionsText(n) {
+    if (n === 1) return "جلسة واحدة";
+    if (n === 2) return "جلستين";
+    if (n <= 10) return `${n} جلسات`;
+    return `${n} جلسة`;
+  }
+
+  function normalizeStudent(st) {
+    if (!st.progress) st.progress = { mem: [], cons: [], rev: [] };
+    if (!st.manualProgress) st.manualProgress = { mem: "", cons: "", rev: "" };
+    if (!st.detailedProgress)
+      st.detailedProgress = { mem: [], cons: [], rev: [] };
+    if (!st.tasksTiming) st.tasksTiming = { mem: {}, cons: {}, rev: {} };
+    return st;
+  }
+
   const loginScreen = document.getElementById("student-login-screen");
   const dashboardScreen = document.getElementById("student-dashboard");
   const loader = document.getElementById("global-loader");
@@ -333,14 +490,16 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => {
       if (loader) loader.style.display = "none";
       const sessionStr = localStorage.getItem("wathbah_student_session");
-      if (sessionStr) {
-        currentStudent = JSON.parse(sessionStr);
-        if (!currentStudent.progress)
-          currentStudent.progress = { mem: [], cons: [], rev: [] };
-        if (!currentStudent.tasksTiming)
-          currentStudent.tasksTiming = { mem: {}, cons: {}, rev: {} };
+      let saved = null;
+      try {
+        saved = sessionStr ? JSON.parse(sessionStr) : null;
+      } catch (e) {}
+      // جلسات طلاب الدورة الصيفية لا تُقبل (الدخول لطلاب الفصل الأول فقط)
+      if (saved && saved.programId === TERM) {
+        currentStudent = normalizeStudent(saved);
         loadStudentDashboard();
       } else {
+        if (sessionStr) localStorage.removeItem("wathbah_student_session");
         if (loginScreen) loginScreen.style.display = "flex";
       }
     }, 500);
@@ -417,29 +576,38 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.disabled = true;
 
       try {
-        let snapshot = await dbFirestore
-          .collection("students")
-          .where("idNumber", "==", loginId)
-          .get();
-
-        if (snapshot.empty) {
-          snapshot = await dbFirestore
+        // طلاب الفصل الأول فقط، ومع تكرار الرقم يُختار الحساب الذي يطابق رقمه السري
+        const termMatches = (snap) => {
+          const list = [];
+          snap.forEach((doc) => {
+            const d = doc.data();
+            if (d.programId === TERM) list.push(d);
+          });
+          return list;
+        };
+        let matches = termMatches(
+          await dbFirestore
             .collection("students")
-            .where("phone", "==", loginId)
-            .get();
-        }
+            .where("idNumber", "==", loginId)
+            .get(),
+        );
+        if (matches.length === 0)
+          matches = termMatches(
+            await dbFirestore
+              .collection("students")
+              .where("phone", "==", loginId)
+              .get(),
+          );
 
-        if (snapshot.empty) {
-          alert("الرقم المدخل غير مسجل في النظام.");
+        if (matches.length === 0) {
+          alert(`الرقم المدخل غير مسجل في ${TERM_NAME}.`);
           btn.innerHTML = "تسجيل الدخول";
           btn.disabled = false;
           return;
         }
 
-        let studentData = null;
-        snapshot.forEach((doc) => {
-          studentData = doc.data();
-        });
+        let studentData =
+          matches.find((d) => d.pin === pin) || matches[matches.length - 1];
 
         if (studentData.pin !== pin) {
           alert("الرقم السري غير صحيح.");
@@ -519,12 +687,43 @@ document.addEventListener("DOMContentLoaded", () => {
         .get();
       const records = recordsSnap.docs.map((doc) => doc.data());
 
-      const currentDay = getCurrentProgramDay();
+      // الفصل: قراءة بيانات الطالب المحدثة (ما سجله المعلم بعد دخول الطالب)
+      if (isTermStudent()) {
+        try {
+          const fresh = await dbFirestore
+            .collection("students")
+            .doc(currentStudent.id)
+            .get();
+          if (fresh.exists && fresh.data().programId === TERM) {
+            currentStudent = normalizeStudent(fresh.data());
+            localStorage.setItem(
+              "wathbah_student_session",
+              JSON.stringify(currentStudent),
+            );
+          }
+        } catch (e) {
+          console.warn("تعذر تحديث بيانات الطالب:", e);
+        }
+      }
+      const term = isTermStudent();
+      // الفصل: الجلسة الحالية هي أول جلسة لم ينته وقتها
+      const currentDay = term
+        ? Math.max(
+            1,
+            Math.min(
+              termDueCount(trackInfo) + 1,
+              trackInfo ? trackInfo.totalDays : 1,
+            ),
+          )
+        : getCurrentProgramDay();
+      const attendanceBase = term ? termDueDates(trackInfo) : currentDay;
       const presentRecords = records.filter(
         (r) => r.attendance === "present" || r.attendance === "late",
       ).length;
       let attendancePercent =
-        currentDay > 0 ? Math.round((presentRecords / currentDay) * 100) : 0;
+        attendanceBase > 0
+          ? Math.round((presentRecords / attendanceBase) * 100)
+          : 0;
       if (attendancePercent > 100) attendancePercent = 100;
       document.getElementById("st-attendance-rate").textContent =
         attendancePercent + "%";
@@ -548,11 +747,41 @@ document.addEventListener("DOMContentLoaded", () => {
       let progressPercent =
         totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       if (progressPercent > 100) progressPercent = 100;
+      if (term) {
+        // الفصل: الإنجاز على الحفظ فقط
+        // من أول حديث في الخطة إلى آخره (بعض الخطط لا تبدأ من الحديث 1)
+        let first = 0;
+        let last = 0;
+        (scheduleData[currentStudent.trackId] || []).forEach((d) => {
+          const m = /ح\s*(\d+)\s*إلى\s*(\d+)/.exec(toLatinDigits(d.mem || ""));
+          if (!m) return;
+          if (!first || +m[1] < first) first = +m[1];
+          if (+m[2] > last) last = +m[2];
+        });
+        const reached = reachedHadith(currentStudent, "mem");
+        const done = reached < first ? 0 : Math.min(reached, last) - first + 1;
+        progressPercent =
+          last > 0
+            ? Math.min(100, Math.round((done / (last - first + 1)) * 100))
+            : 0;
+      }
       document.getElementById("st-progress-rate").textContent =
         progressPercent + "%";
 
-      document.getElementById("st-today-label").textContent =
-        getDateLabel(currentDay);
+      if (term) {
+        let statusHtml = "";
+        if (trackInfo && trackInfo.startDate) {
+          const behind = termMemBehind(currentStudent, trackInfo);
+          statusHtml =
+            behind > 0
+              ? `<br><span style="color:#991b1b; font-size:0.85rem;">⚠️ متأخر في الحفظ (${sessionsText(behind)})</span>`
+              : `<br><span style="color:#166534; font-size:0.85rem;">🌟 مواكب للخطة في الحفظ</span>`;
+        }
+        document.getElementById("st-today-label").innerHTML =
+          termDayLabel(trackInfo, currentDay) + statusHtml;
+      } else
+        document.getElementById("st-today-label").textContent =
+          getDateLabel(currentDay);
 
       let memTimeStr = "";
       let consTimeStr = "";
@@ -570,6 +799,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const t = currentStudent.tasksTiming?.rev?.["day_" + currentDay];
         if (t) revTimeStr = ` (بعد ${t} ${t === "فجر" ? "🌅" : "🌇"})`;
       }
+      if (term) {
+        const doneStr = (type) =>
+          isTermTaskDone(currentStudent, type, currentDay) ? " ✅" : "";
+        memTimeStr = doneStr("mem");
+        consTimeStr = doneStr("cons");
+        revTimeStr = doneStr("rev");
+      }
 
       document.getElementById("st-task-mem").innerHTML =
         getTaskText(currentStudent.trackId, "mem", currentDay) +
@@ -581,7 +817,9 @@ document.addEventListener("DOMContentLoaded", () => {
         getTaskText(currentStudent.trackId, "rev", currentDay) +
         `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${revTimeStr}</span>`;
 
-      const todayIso = new Date().toISOString().split("T")[0];
+      const todayIso = term
+        ? toIsoDate(new Date())
+        : new Date().toISOString().split("T")[0];
       const todayRecord = records.find((r) => r.date === todayIso);
 
       const statusDiv = document.getElementById("st-today-status");
@@ -603,6 +841,9 @@ document.addEventListener("DOMContentLoaded", () => {
           statusCard.style.borderTop = "4px solid #991b1b";
           statusDiv.style.color = "#991b1b";
         }
+        if (term && todayRecord.recitedAt)
+          text += ` (وقت التسميع: ${formatRecitedAt(todayRecord.recitedAt)})`;
+        if (term && todayRecord.isReview) text += " 🔁 مراجعة";
         statusDiv.textContent = text;
       } else {
         statusCard.style.borderTop = "4px solid var(--text-gray)";
@@ -656,6 +897,23 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("تعذر جلب الرسائل الواردة للطالب:", err);
       }
 
+      // الفصل: كتاب المسار
+      const booksBox = document.getElementById("st-books");
+      if (booksBox) {
+        const books = term
+          ? (window.TERM_BOOKS || []).filter((b) =>
+              (b.tracks || []).includes(currentStudent.trackId),
+            )
+          : [];
+        booksBox.innerHTML = books
+          .map(
+            (b) =>
+              `<a href="${b.file}" target="_blank" rel="noopener" class="btn-action" style="display:flex; justify-content:center; gap:8px; align-items:center; width:100%; margin-top:10px; padding:10px; font-size:0.9rem; text-decoration:none;">📚 ${b.name}</a>`,
+          )
+          .join("");
+        booksBox.style.display = books.length ? "block" : "none";
+      }
+
       // --- برمجة عرض المنهج الكامل للطالب ---
       const btnShowSyllabus = document.getElementById("btn-show-syllabus");
       if (btnShowSyllabus) {
@@ -671,11 +929,16 @@ document.addEventListener("DOMContentLoaded", () => {
           tbody.innerHTML = "";
 
           sched.forEach((item) => {
-            const isMemDone = currentStudent.progress?.mem?.includes(item.day);
-            const isConsDone = currentStudent.progress?.cons?.includes(
+            let isMemDone = currentStudent.progress?.mem?.includes(item.day);
+            let isConsDone = currentStudent.progress?.cons?.includes(
               item.day,
             );
-            const isRevDone = currentStudent.progress?.rev?.includes(item.day);
+            let isRevDone = currentStudent.progress?.rev?.includes(item.day);
+            if (term) {
+              isMemDone = isTermTaskDone(currentStudent, "mem", item.day);
+              isConsDone = isTermTaskDone(currentStudent, "cons", item.day);
+              isRevDone = isTermTaskDone(currentStudent, "rev", item.day);
+            }
 
             const memStyle = isMemDone
               ? "text-decoration: line-through; color: #166534; font-weight: bold;"
@@ -692,7 +955,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             tbody.innerHTML += `
               <tr ${rowClass}>
-                <td style="font-weight: bold; width: 130px;">${getDateLabel(item.day)}</td>
+                <td style="font-weight: bold; width: 130px;">${term ? termDayLabel(trackInfo, item.day) : getDateLabel(item.day)}</td>
                 <td>
                   <div style="margin-bottom:6px; font-size: 0.8rem; ${memStyle}">📖 حفظ: ${item.mem} ${isMemDone ? "✅" : ""}</div>
                   <div style="margin-bottom:6px; font-size: 0.8rem; ${consStyle}">🔄 تثبيت: ${item.cons} ${isConsDone ? "✅" : ""}</div>

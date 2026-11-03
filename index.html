@@ -23,6 +23,9 @@
         <div class="auth-header">
           <h1 class="brand-title">أهلاً بك في حلقات الحديث</h1>
           <p class="brand-subtitle">يرجى تحديد صفتك وتسجيل الدخول بأمان</p>
+          <p class="brand-subtitle" style="font-weight: 800">
+            الدورة الفصل الأول 1448
+          </p>
         </div>
         <form id="login-form">
           <div class="input-group">
@@ -96,6 +99,19 @@
           <p class="user-name-display" id="current-user-name">
             جارِ التحميل...
           </p>
+          <p
+            class="user-name-display"
+            id="current-program-name"
+            style="display: none; font-size: 0.8rem"
+          ></p>
+          <select
+            id="program-select"
+            class="modern-input"
+            style="display: none; margin-top: 8px; padding: 0.4rem; font-size: 0.85rem; min-height: auto"
+          >
+            <option value="term1_1448">الدورة الفصل الأول 1448</option>
+            <option value="summer_1448">الدورة الصيفية 1448</option>
+          </select>
         </div>
         <nav class="side-nav">
           <button
@@ -205,6 +221,21 @@
           </button>
           <button
             class="nav-btn"
+            data-target="books-library"
+            data-permission="view_books"
+            onclick="
+              if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document
+                  .getElementById('sidebar-overlay')
+                  .classList.remove('active');
+              }
+            "
+          >
+            📚 الكتب
+          </button>
+          <button
+            class="nav-btn"
             data-target="messages-box"
             data-permission="view_dashboard"
             onclick="
@@ -275,6 +306,22 @@
       </aside>
 
       <main class="main-content">
+        <div
+          id="summer-archive-banner"
+          style="
+            display: none;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 1rem;
+            font-weight: 800;
+            font-size: 0.9rem;
+          "
+        >
+          📦 أنت تعرض الدورة الصيفية 1448 — لا يدخلها ولا يراها إلا المدير.
+        </div>
         <div id="daily-tracking" class="app-section">
           <div
             class="top-page-header"
@@ -294,6 +341,34 @@
               >
                 🔄 تبديل وضع التسميع للجميع (شريط/دقيق)
               </button>
+            </div>
+            <div class="term-only" style="display: none">
+              <label
+                style="
+                  display: block;
+                  font-size: 0.8rem;
+                  font-weight: 800;
+                  color: var(--primary-blue);
+                  margin-bottom: 3px;
+                "
+                >📅 تاريخ التسجيل</label
+              >
+              <input
+                type="date"
+                id="tracking-date"
+                class="modern-input"
+                style="border-width: 2px; width: auto"
+              />
+              <span
+                id="tracking-date-hijri"
+                style="
+                  display: block;
+                  font-size: 0.8rem;
+                  font-weight: 800;
+                  color: var(--primary-blue);
+                  margin-top: 3px;
+                "
+              ></span>
             </div>
             <select
               id="tracking-circle-filter"
@@ -321,6 +396,21 @@
             <h2>لوحة التحكم 📊</h2>
           </div>
           <div class="stats-grid" id="main-dashboard-grid"></div>
+        </div>
+
+        <div id="books-library" class="app-section">
+          <div class="top-page-header">
+            <div></div>
+            <h2>الكتب 📚</h2>
+          </div>
+          <div
+            id="books-library-list"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+              gap: 1.5rem;
+            "
+          ></div>
         </div>
 
         <div id="messages-box" class="app-section">
@@ -437,6 +527,20 @@
                   required
                 />
               </div>
+              <div
+                class="input-group term-only"
+                style="display: none; margin: 0; width: 170px"
+              >
+                <label style="font-size: 0.8rem">عدد أسابيع الخطة</label>
+                <input
+                  type="number"
+                  id="track-weeks-input"
+                  class="modern-input"
+                  min="1"
+                  max="60"
+                  value="12"
+                />
+              </div>
               <button
                 type="submit"
                 class="btn-submit"
@@ -445,6 +549,56 @@
                 حفظ المسار
               </button>
             </form>
+          </div>
+          <div class="content-card term-only" style="display: none">
+            <h3 class="content-card-title">بداية خطة الفصل</h3>
+            <p
+              style="
+                font-size: 0.85rem;
+                color: var(--text-gray);
+                margin-bottom: 1rem;
+                line-height: 1.7;
+              "
+            >
+              أيام الخطة تُسمَّع كالتالي: الأحد = الجمعة صباحاً، الإثنين =
+              الجمعة عصراً، الثلاثاء = السبت فجراً، الأربعاء = السبت عصراً.
+              اختر تاريخ أول جمعة في الدورة، ويُطبَّق على كل مسارات الفصل.
+            </p>
+            <form
+              id="term-start-form"
+              style="
+                display: flex;
+                gap: 1rem;
+                align-items: flex-end;
+                flex-wrap: wrap;
+              "
+            >
+              <div class="input-group" style="margin: 0">
+                <label>تاريخ أول جمعة</label>
+                <input
+                  type="date"
+                  id="term-start-input"
+                  class="modern-input"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                class="btn-submit"
+                style="width: auto; margin: 0; padding: 0.9rem 2rem"
+              >
+                حفظ تاريخ البداية
+              </button>
+            </form>
+            <p
+              id="term-start-info"
+              style="
+                margin-top: 0.8rem;
+                font-size: 0.85rem;
+                font-weight: bold;
+                color: var(--primary-blue);
+              "
+            ></p>
           </div>
           <div class="table-wrapper">
             <table class="modern-table">
@@ -464,6 +618,38 @@
           <div class="top-page-header">
             <div></div>
             <h2>إدارة المستفيدين 👥</h2>
+          </div>
+          <div
+            class="content-card"
+            id="accounts-transfer-card"
+            style="display: none; margin-bottom: 1.5rem"
+          >
+            <h3 class="content-card-title">حسابات الدورة الصيفية</h3>
+            <p
+              style="
+                font-size: 0.85rem;
+                color: var(--text-gray);
+                line-height: 1.7;
+                margin-bottom: 0.8rem;
+              "
+            >
+              ينقل حسابات المعلمين والمشرفين والطلاب إلى الدورة الفصل الأول
+              بنفس الأسماء وأرقام الجوال والهوية والأرقام السرية، فيدخل كل
+              شخص بحسابه المعتاد على الفصل الأول. بدون حلقات ولا مسارات ولا
+              إنجاز، ولا يتغير أي شيء في الدورة الصيفية.
+            </p>
+            <p
+              id="accounts-transfer-info"
+              style="font-size: 0.9rem; margin-bottom: 0.8rem"
+            ></p>
+            <button
+              type="button"
+              id="accounts-transfer-btn"
+              class="btn-submit"
+              style="width: auto; margin: 0; padding: 0.7rem 1.5rem"
+            >
+              نقل الحسابات إلى الفصل الأول
+            </button>
           </div>
           <div
             style="
@@ -943,6 +1129,11 @@
                 class="modern-input"
                 style="width: auto; padding: 0.5rem"
               />
+              <span
+                id="admin-record-date-hijri"
+                class="term-only"
+                style="display: none; font-weight: 800; color: var(--primary-blue)"
+              ></span>
               <input
                 type="text"
                 id="admin-student-search"
@@ -1023,6 +1214,16 @@
                   id="report-date-input"
                   class="modern-input"
                 />
+                <span
+                  id="report-date-hijri"
+                  class="term-only"
+                  style="
+                    display: none;
+                    font-size: 0.8rem;
+                    font-weight: 800;
+                    color: var(--primary-blue);
+                  "
+                ></span>
               </div>
               <div
                 class="input-group"
@@ -1063,6 +1264,9 @@
                   <th>أيام الحضور</th>
                   <th>ما تم إنجازه اليوم</th>
                   <th>إجمالي الحفظ (الأحاديث)</th>
+                  <th class="term-only" style="display: none">
+                    عدد الصفحات المنجزة
+                  </th>
                   <th>ملاحظات</th>
                 </tr>
               </thead>
@@ -1227,6 +1431,32 @@
         </h2>
         <form id="schedule-modal-form">
           <div
+            id="schedule-weeks-bar"
+            style="
+              display: none;
+              gap: 10px;
+              align-items: center;
+              margin-bottom: 1rem;
+              flex-wrap: wrap;
+            "
+          >
+            <label style="font-weight: bold">عدد أسابيع الخطة:</label>
+            <input
+              type="number"
+              id="schedule-weeks-input"
+              class="modern-input"
+              min="1"
+              max="60"
+              style="width: 100px"
+            />
+            <button type="button" class="btn-action" id="schedule-weeks-apply">
+              تطبيق
+            </button>
+            <span style="font-size: 0.8rem; color: var(--text-gray)"
+              >كل أسبوع 4 أيام: الأحد إلى الأربعاء</span
+            >
+          </div>
+          <div
             style="
               max-height: 60vh;
               overflow-y: auto;
@@ -1285,6 +1515,7 @@
           <table class="modern-table">
             <thead>
               <tr>
+                <th>حفظ</th>
                 <th>صف</th>
                 <th>الاسم</th>
                 <th>الجوال</th>
@@ -1323,6 +1554,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
     <script src="firebase.js"></script>
+    <script src="term-plans.js"></script>
+    <script src="books.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

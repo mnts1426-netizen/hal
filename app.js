@@ -76,6 +76,254 @@ document.addEventListener("DOMContentLoaded", () => {
     return (ROLE_PERMISSIONS[role] || []).includes(permissionName);
   }
 
+  // ================= الدورات: الصيفية (للمدير فقط) والفصل الأول =================
+  // كل البيانات القديمة بدون programId = الدورة الصيفية، ولا يتغير فيها شيء
+  const SUMMER = "summer_1448";
+  const TERM = "term1_1448";
+  const PROGRAM_NAMES = {
+    [SUMMER]: "الدورة الصيفية 1448",
+    [TERM]: "الدورة الفصل الأول 1448",
+  };
+  const isTermDoc = (x) => !!x && x.programId === TERM;
+  let activeProgram = TERM;
+  const isTerm = () => activeProgram === TERM;
+
+  // ما يُنشأ في الفصل الأول يُعلَّم به، وما يُنشأ في الصيفية يبقى كما كان
+  function stampProgram(obj) {
+    if (isTerm()) obj.programId = TERM;
+    return obj;
+  }
+
+  // أيام خطة الفصل (الأحد إلى الأربعاء) تُسمَّع في جلسات الجمعة والسبت
+  // dueHour: الساعة التي بعدها تُعتبر الجلسة منتهية عند حساب المواكبة
+  const TERM_SLOTS = [
+    { plan: "الأحد", session: "فجر الجمعة", offset: 0, dueHour: 12 },
+    { plan: "الإثنين", session: "عصر الجمعة", offset: 0, dueHour: 18 },
+    { plan: "الثلاثاء", session: "فجر السبت", offset: 1, dueHour: 12 },
+    { plan: "الأربعاء", session: "عصر السبت", offset: 1, dueHour: 18 },
+  ];
+
+  function parseIsoDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+
+  function toIsoDate(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  function hijriDayMonth(d, withYear) {
+    try {
+      return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+        day: "numeric",
+        month: "long",
+        ...(withYear ? { year: "numeric" } : {}),
+      }).format(d);
+    } catch (e) {
+      return d.toLocaleDateString("ar-SA");
+    }
+  }
+
+  function termSessionDate(track, day) {
+    const first = parseIsoDate(track && track.startDate);
+    if (!first || day < 1) return null;
+    while (first.getDay() !== 5) first.setDate(first.getDate() + 1);
+    const slot = TERM_SLOTS[(day - 1) % 4];
+    first.setDate(first.getDate() + Math.floor((day - 1) / 4) * 7 + slot.offset);
+    return first;
+  }
+
+  function termDayLabel(track, day) {
+    const slot = TERM_SLOTS[(day - 1) % 4];
+    const week = Math.floor((day - 1) / 4) + 1;
+    const d = termSessionDate(track, day);
+    return `الأسبوع ${week} - ${slot.plan} (${slot.session}${d ? " " + hijriDayMonth(d) : ""})`;
+  }
+
+  // عدد جلسات الخطة التي انتهى وقتها حتى الآن
+  function termDueCount(track) {
+    if (!track || !track.startDate) return 0;
+    const now = new Date();
+    let n = 0;
+    for (let day = 1; day <= (track.totalDays || 0); day++) {
+      const d = termSessionDate(track, day);
+      d.setHours(TERM_SLOTS[(day - 1) % 4].dueHour, 0, 0, 0);
+      if (now < d) break;
+      n++;
+    }
+    return n;
+  }
+
+  // عدد أيام الحلقة (الجمعة والسبت) التي مضت، لحساب نسبة الحضور
+  function termDueDates(track) {
+    const dates = new Set();
+    for (let day = 1; day <= termDueCount(track); day++)
+      dates.add(toIsoDate(termSessionDate(track, day)));
+    return dates.size;
+  }
+
+  function sessionsText(n) {
+    if (n === 1) return "جلسة واحدة";
+    if (n === 2) return "جلستين";
+    if (n <= 10) return `${n} جلسات`;
+    return `${n} جلسة`;
+  }
+
+  function pagesText(n) {
+    if (n === 1) return "صفحة واحدة";
+    if (n === 2) return "صفحتان";
+    if (n >= 3 && n <= 10) return `${n} صفحات`;
+    return `${n} صفحة`;
+  }
+
+  function formatRecitedAt(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const day = d.toLocaleDateString("ar-SA", { weekday: "long" });
+    const time = d.toLocaleTimeString("ar-SA-u-nu-latn", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `${day} ${hijriDayMonth(d)} - ${time}`;
+  }
+
+  function toLocalInputValue(ts) {
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${toIsoDate(d)}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  // أعلى حديث وصل له الطالب في نوع معين (حفظ / تثبيت / مراجعة)
+  function reachedHadith(student, type) {
+    let n = parseInt(student.manualProgress?.[type]) || 0;
+    (student.detailedProgress?.[type] || []).forEach((h) => {
+      if (h > n) n = h;
+    });
+    (student.progress?.[type] || []).forEach((day) => {
+      const t = extractMaxNum(getTaskText(student.trackId, type, day));
+      if (t > n) n = t;
+    });
+    return n;
+  }
+
+  // المواكبة في الفصل على الحفظ فقط: كم جلسة انتهت ولم يصل الطالب لمقرر حفظها
+  function termMemStatus(student) {
+    const track = window.db.tracks.find((t) => t.id === student.trackId);
+    if (!track || !track.startDate) return null;
+    const due = termDueCount(track);
+    const reached = reachedHadith(student, "mem");
+    let behind = 0;
+    for (let day = 1; day <= due; day++) {
+      // جلسات المراجعة والاختبار ليس فيها حفظ جديد فلا تُحسب
+      const target = extractMaxNum(getTaskText(track.id, "mem", day) || "");
+      if (target > 0 && reached < target) behind++;
+    }
+    return { due, reached, behind };
+  }
+
+  function memBadgeHtml(st) {
+    if (!st) return "";
+    if (st.behind <= 0)
+      return `<span class="badge" style="background:#dcfce7; color:#166534; border:1px solid #166534;">🌟 مواكب للخطة</span>`;
+    if (st.behind <= 2)
+      return `<span class="badge" style="background:#fef3c7; color:#b45309; border:1px solid #b45309;">⚠️ متأخر في الحفظ (${sessionsText(st.behind)})</span>`;
+    return `<span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #991b1b;">🚨 متأخر جداً في الحفظ (${sessionsText(st.behind)})</span>`;
+  }
+
+  // نسبة الحفظ من الخطة كاملة
+  // أول وآخر حديث في خطة الحفظ (بعض الخطط لا تبدأ من الحديث 1)
+  function termPlanRange(trackId) {
+    let first = 0;
+    let last = 0;
+    (window.db.scheduleData[trackId] || []).forEach((d) => {
+      const m = /ح\s*(\d+)\s*إلى\s*(\d+)/.exec(toLatinDigits(d.mem || ""));
+      if (!m) return;
+      if (!first || +m[1] < first) first = +m[1];
+      if (+m[2] > last) last = +m[2];
+    });
+    return { first, last };
+  }
+
+  // عدد ما حفظه الطالب من خطته
+  function termMemCount(student) {
+    const { first, last } = termPlanRange(student.trackId);
+    const reached = reachedHadith(student, "mem");
+    if (!last) return reached;
+    if (reached < first) return 0;
+    return Math.min(reached, last) - first + 1;
+  }
+
+  // التاريخ الهجري: الأربعاء 1448/05/24هـ
+  function hijriDate(iso) {
+    const d = parseIsoDate(iso);
+    if (!d) return iso || "";
+    try {
+      const parts = new Intl.DateTimeFormat(
+        "ar-SA-u-ca-islamic-umalqura-nu-latn",
+        { day: "2-digit", month: "2-digit", year: "numeric" },
+      ).formatToParts(d);
+      const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
+      const day = d.toLocaleDateString("ar-SA", { weekday: "long" });
+      return `${day} ${get("year")}/${get("month")}/${get("day")}هـ`;
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  // جلسات الحفظ في الخطة مع صفحاتها: ح 1 إلى 24 (ص 1-8)
+  function termPlanSessions(trackId) {
+    const out = [];
+    (window.db.scheduleData[trackId] || []).forEach((d) => {
+      const m = /ح\s*(\d+)\s*إلى\s*(\d+)\s*\(ص\s*(\d+)-(\d+)\)/.exec(
+        toLatinDigits(d.mem || ""),
+      );
+      if (m) out.push({ fh: +m[1], th: +m[2], fp: +m[3], tp: +m[4] });
+    });
+    return out.sort((a, b) => a.fh - b.fh);
+  }
+
+  // عدد الصفحات المنجزة من كتاب المسار: عند نهاية الجلسة من الخطة، وداخلها من فهرس الكتاب
+  function termPagesDone(student) {
+    const sessions = termPlanSessions(student.trackId);
+    if (sessions.length === 0) return null;
+    const n = reachedHadith(student, "mem");
+    const firstPage = sessions[0].fp;
+    if (n < sessions[0].fh) return 0;
+    const book = (window.TERM_BOOKS || []).find((b) =>
+      (b.tracks || []).includes(student.trackId),
+    );
+    const startOf = (h) =>
+      book && book.startPages ? book.startPages[h - 1] : undefined;
+    const s = sessions.find((x) => n >= x.fh && n <= x.th);
+    let end;
+    if (!s) {
+      const prev = sessions.filter((x) => x.th <= n).pop();
+      end = prev ? prev.tp : firstPage;
+    } else if (n === s.th) end = s.tp;
+    else {
+      const a = startOf(n);
+      const b = startOf(n + 1);
+      if (a) end = Math.max(a, (b || a) - 1);
+      else
+        end =
+          s.fp +
+          Math.floor(((n - s.fh + 1) / (s.th - s.fh + 1)) * (s.tp - s.fp));
+      end = Math.min(Math.max(end, s.fp), s.tp);
+    }
+    return Math.max(0, end - firstPage + 1);
+  }
+
+  // نسبة الحفظ من الخطة كاملة
+  function termMemPercent(student) {
+    const { first, last } = termPlanRange(student.trackId);
+    if (!last) return 0;
+    return Math.min(
+      100,
+      Math.round((termMemCount(student) / (last - first + 1)) * 100),
+    );
+  }
+
   const PROGRAM_START_DATE = new Date("2026-07-19");
   const PROGRAM_DATES = [
     "الأحد 19 يوليو (5 صفر)",
@@ -103,7 +351,12 @@ document.addEventListener("DOMContentLoaded", () => {
     "الخميس 13 أغسطس (1 ربيع الأول)",
   ];
 
-  function getDateLabel(dayIndex) {
+  function getDateLabel(dayIndex, trackId) {
+    if (isTerm())
+      return termDayLabel(
+        window.db.tracks.find((t) => t.id === trackId),
+        dayIndex,
+      );
     if (dayIndex >= 1 && dayIndex <= 23) return PROGRAM_DATES[dayIndex - 1];
     return `اليوم ${dayIndex}`;
   }
@@ -385,6 +638,18 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.keys(scheduleData).forEach((id) => {
       sched[id] = scheduleData[id].map((d) => ({ ...d }));
     });
+    // خطط الفصل الأول من ملف term-plans.js (وما يعدّله المدير في قاعدة البيانات يُقدَّم عليها)
+    (window.TERM_PLANS || []).forEach((p) => {
+      tracks.push({
+        id: p.id,
+        name: p.name,
+        totalDays: p.totalDays,
+        totalHadiths: p.totalHadiths,
+        startDate: p.startDate,
+        programId: TERM,
+      });
+      sched[p.id] = p.schedule.map((d) => ({ ...d }));
+    });
     trackDocs
       .filter((d) => d && d.id)
       .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
@@ -397,6 +662,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (d.name) t.name = d.name;
         if (d.totalDays) t.totalDays = d.totalDays;
         if (d.totalHadiths) t.totalHadiths = d.totalHadiths;
+        if (d.programId) t.programId = d.programId;
+        if (d.startDate) t.startDate = d.startDate;
+        if (d.createdAt) t.createdAt = d.createdAt;
         if (Array.isArray(d.schedule) && d.schedule.length > 0)
           sched[d.id] = d.schedule.map((x) => ({ ...x }));
         else if (!sched[d.id]) sched[d.id] = emptySchedule(t.totalDays);
@@ -427,6 +695,8 @@ document.addEventListener("DOMContentLoaded", () => {
           })),
           createdAt: t.createdAt || 0,
           updatedAt: Date.now(),
+          ...(t.programId ? { programId: t.programId } : {}),
+          ...(t.startDate ? { startDate: t.startDate } : {}),
         });
       return true;
     } catch (e) {
@@ -447,17 +717,77 @@ document.addEventListener("DOMContentLoaded", () => {
     if (dayIndex <= 0) return "لا يوجد";
     const sched = window.db.scheduleData[trackId];
     if (sched && sched[dayIndex - 1]) return sched[dayIndex - 1][taskType];
-    return `مقرر ${getDateLabel(dayIndex)}`;
+    return `مقرر ${getDateLabel(dayIndex, trackId)}`;
   }
 
   function extractMaxNum(text) {
+    if (isTerm() && text) {
+      const m = /ح\s*(\d+)\s*إلى\s*(\d+)/.exec(toLatinDigits(text));
+      if (m) return Number(m[2]);
+    }
     if (!text || text.includes("لا يوجد") || text.includes("مراجعة")) return 0;
-    const nums = text.match(/\d+/g);
+    const nums = (isTerm() ? toLatinDigits(text) : text).match(/\d+/g);
     return nums ? Math.max(...nums.map(Number)) : 0;
   }
 
+  // بيانات الدورتين في الذاكرة، و window.db هو الدورة المعروضة حالياً
+  // (المدراء والرسائل وسجل العمليات والمقررات مشتركة بين الدورتين)
+  let programs = null;
+
+  function setPrograms(flat) {
+    const termStudentIds = new Set(
+      flat.students.filter(isTermDoc).map((s) => s.id),
+    );
+    const make = (term) => {
+      const pick = (arr) => (arr || []).filter((x) => isTermDoc(x) === term);
+      return {
+        tracks: pick(flat.tracks),
+        scheduleData: flat.scheduleData,
+        circles: pick(flat.circles),
+        students: pick(flat.students),
+        users: {
+          admin: flat.users.admin,
+          supervisor: pick(flat.users.supervisor),
+          teacher: pick(flat.users.teacher),
+        },
+        dailyRecords: (flat.dailyRecords || []).filter(
+          (r) => (isTermDoc(r) || termStudentIds.has(r.studentId)) === term,
+        ),
+        auditLogs: flat.auditLogs,
+        messages: flat.messages,
+      };
+    };
+    programs = { [SUMMER]: make(false), [TERM]: make(true) };
+    window.db = programs[activeProgram];
+  }
+
+  function useProgram(p) {
+    activeProgram = p === SUMMER ? SUMMER : TERM;
+    if (programs) window.db = programs[activeProgram];
+  }
+
+  function mergedDB() {
+    if (!programs) return window.db;
+    const s = programs[SUMMER];
+    const t = programs[TERM];
+    return {
+      tracks: [...s.tracks, ...t.tracks],
+      scheduleData: s.scheduleData,
+      circles: [...s.circles, ...t.circles],
+      students: [...s.students, ...t.students],
+      users: {
+        admin: s.users.admin,
+        supervisor: [...s.users.supervisor, ...t.users.supervisor],
+        teacher: [...s.users.teacher, ...t.users.teacher],
+      },
+      dailyRecords: [...s.dailyRecords, ...t.dailyRecords],
+      auditLogs: s.auditLogs,
+      messages: s.messages,
+    };
+  }
+
   function saveLocalDB() {
-    localStorage.setItem("wathbah_db", JSON.stringify(window.db));
+    localStorage.setItem("wathbah_db", JSON.stringify(mergedDB()));
   }
 
   async function syncToFirestore(collectionName, docId, data) {
@@ -623,7 +953,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!isFirstSeed) syncToFirestore("users", idaraAdmin.id, idaraAdmin);
       }
 
-      window.db = {
+      setPrograms({
         tracks: builtTracks.tracks,
         scheduleData: builtTracks.sched,
         circles: loadedCircles,
@@ -632,7 +962,7 @@ document.addEventListener("DOMContentLoaded", () => {
         dailyRecords: loadedRecords,
         auditLogs: loadedLogs,
         messages: loadedMessages,
-      };
+      });
 
       saveLocalDB();
       if (isFirstSeed) {
@@ -644,23 +974,30 @@ document.addEventListener("DOMContentLoaded", () => {
       console.warn("استخدام النسخة المحلية للبيانات بسبب انقطاع الاتصال.", e);
       const stored = localStorage.getItem("wathbah_db");
       if (stored) {
-        window.db = JSON.parse(stored);
+        const flat = JSON.parse(stored);
         if (
-          !Array.isArray(window.db.tracks) ||
-          window.db.tracks.length === 0 ||
-          !window.db.scheduleData
+          !Array.isArray(flat.tracks) ||
+          flat.tracks.length === 0 ||
+          !flat.scheduleData
         ) {
           const defaults = buildTracks([]);
-          window.db.tracks = defaults.tracks;
-          window.db.scheduleData = defaults.sched;
+          flat.tracks = defaults.tracks;
+          flat.scheduleData = defaults.sched;
         }
-        if (!window.db.messages) window.db.messages = [];
-        window.db.students.forEach((s) => {
+        if (!flat.messages) flat.messages = [];
+        if (!flat.auditLogs) flat.auditLogs = [];
+        if (!flat.dailyRecords) flat.dailyRecords = [];
+        if (!flat.circles) flat.circles = [];
+        if (!flat.students) flat.students = [];
+        if (!flat.users) flat.users = { admin: [], supervisor: [], teacher: [] };
+        if (!flat.users.admin) flat.users.admin = [];
+        flat.students.forEach((s) => {
           if (!s.tasksTiming) s.tasksTiming = { mem: {}, cons: {}, rev: {} };
         });
+        setPrograms(flat);
       } else {
         const defaults = buildTracks([]);
-        window.db = {
+        setPrograms({
           tracks: defaults.tracks,
           scheduleData: defaults.sched,
           circles: [],
@@ -681,7 +1018,7 @@ document.addEventListener("DOMContentLoaded", () => {
           dailyRecords: [],
           auditLogs: [],
           messages: [],
-        };
+        });
       }
     }
   }
@@ -900,8 +1237,67 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
+  // الجلسة المحفوظة تُقبل فقط لحساب موجود: المدير، أو حساب من الفصل الأول
+  // (حسابات الدورة الصيفية لا تدخل النظام، ويطلع عليها المدير فقط)
+  function findSessionUser(sessionUser) {
+    if (!programs || !sessionUser || !sessionUser.role) return null;
+    const list = programs[TERM].users[sessionUser.role] || [];
+    return list.find((u) => u.id === sessionUser.id) || null;
+  }
+
+  function savedAdminProgram() {
+    try {
+      return localStorage.getItem("hadith_program") === SUMMER ? SUMMER : TERM;
+    } catch (e) {
+      return TERM;
+    }
+  }
+
+  function navAllowed(perm) {
+    // في الفصل الأول: المدير والمشرف يستطيعان تسجيل التسميع وتعديله أيضاً
+    if (perm === PERMISSIONS.RECORD_ATTENDANCE && isTerm()) return true;
+    // الكتب للدورة الفصل الأول فقط
+    if (perm === "view_books") return isTerm();
+    return hasPermission(currentUser.role, perm);
+  }
+
+  // ما يتغير في الواجهة بين الدورتين
+  function applyProgramUI() {
+    document.querySelectorAll(".nav-btn").forEach((btn) => {
+      btn.style.display = navAllowed(btn.getAttribute("data-permission"))
+        ? "flex"
+        : "none";
+    });
+    const isAdmin = currentUser.role === "admin";
+    const progSelect = document.getElementById("program-select");
+    if (progSelect) {
+      progSelect.style.display = isAdmin ? "block" : "none";
+      progSelect.value = activeProgram;
+    }
+    const progName = document.getElementById("current-program-name");
+    if (progName) {
+      progName.textContent = PROGRAM_NAMES[activeProgram];
+      progName.style.display = isAdmin ? "none" : "block";
+    }
+    const banner = document.getElementById("summer-archive-banner");
+    if (banner) banner.style.display = isTerm() ? "none" : "block";
+    document.querySelectorAll(".term-only").forEach((el) => {
+      el.style.display = isTerm() ? "" : "none";
+    });
+    const trackingDate = document.getElementById("tracking-date");
+    if (trackingDate) {
+      const todayLocal = toIsoDate(new Date());
+      trackingDate.max = todayLocal;
+      if (!trackingDate.value || trackingDate.value > todayLocal)
+        trackingDate.value = todayLocal;
+    }
+    // تسجيل الفصل يكون بإدخال رقم الحديث يدوياً
+    isGlobalManualMode = isTerm();
+  }
+
   function doLogin(user, isAutoSession = false) {
     currentUser = user;
+    useProgram(currentUser.role === "admin" ? savedAdminProgram() : TERM);
     localStorage.setItem(
       "wathbah_session",
       JSON.stringify({ user: currentUser, loginTime: Date.now() }),
@@ -910,14 +1306,7 @@ document.addEventListener("DOMContentLoaded", () => {
     mainApp.style.display = "flex";
     document.getElementById("current-user-name").textContent = currentUser.name;
 
-    document.querySelectorAll(".nav-btn").forEach((btn) => {
-      btn.style.display = hasPermission(
-        currentUser.role,
-        btn.getAttribute("data-permission"),
-      )
-        ? "flex"
-        : "none";
-    });
+    applyProgramUI();
 
     if (document.getElementById("add-supervisor-card"))
       document.getElementById("add-supervisor-card").style.display =
@@ -967,9 +1356,12 @@ document.addEventListener("DOMContentLoaded", () => {
       loader.style.opacity = "0";
       setTimeout(() => {
         loader.style.display = "none";
-        const sessionUser = checkSession();
+        const sessionUser = findSessionUser(checkSession());
         if (sessionUser) doLogin(sessionUser, true);
-        else loginScreen.style.display = "flex";
+        else {
+          localStorage.removeItem("wathbah_session");
+          loginScreen.style.display = "flex";
+        }
       }, 500);
     }
   }, 600);
@@ -1042,6 +1434,7 @@ document.addEventListener("DOMContentLoaded", () => {
     addLog("تسجيل الخروج", "عام");
     localStorage.removeItem("wathbah_session");
     currentUser = null;
+    useProgram(TERM);
     mainApp.style.display = "none";
     loginScreen.style.display = "flex";
     roleSelect.value = "";
@@ -1053,7 +1446,30 @@ document.addEventListener("DOMContentLoaded", () => {
     loginPasswordInput.disabled = true;
   });
 
+  // المدير فقط: التبديل بين الفصل الأول والدورة الصيفية
+  const programSelect = document.getElementById("program-select");
+  if (programSelect) {
+    programSelect.addEventListener("change", () => {
+      if (!currentUser || currentUser.role !== "admin") return;
+      try {
+        localStorage.setItem("hadith_program", programSelect.value);
+      } catch (e) {}
+      useProgram(programSelect.value);
+      applyProgramUI();
+      const activeBtn = document.querySelector(".nav-btn.active");
+      if (!activeBtn || activeBtn.style.display === "none") {
+        const firstBtn = document.querySelector(
+          '.nav-btn[style*="display: flex"]',
+        );
+        if (firstBtn) firstBtn.click();
+      }
+      refreshAllViews();
+    });
+  }
+
   function refreshAllViews() {
+    renderBooks();
+    renderAccountsTransfer();
     renderTracks();
     renderStudents();
     renderTeachers();
@@ -1062,8 +1478,9 @@ document.addEventListener("DOMContentLoaded", () => {
     updateSupportInfo();
     renderMessages();
     if (currentUser) adjustNotificationUI(currentUser.role);
-    if (currentUser && currentUser.role === "teacher") renderDailyTracking("");
-    else renderAdminRecords();
+    if (currentUser && (currentUser.role === "teacher" || isTerm()))
+      renderDailyTracking("");
+    if (!currentUser || currentUser.role !== "teacher") renderAdminRecords();
     generateReport();
     updateTopBanner();
     refreshCirclesManager();
@@ -1242,7 +1659,9 @@ document.addEventListener("DOMContentLoaded", () => {
       ? window.db.students.filter((s) => teacherCircles.includes(s.circleId))
       : window.db.students;
     const circlesCount = window.db.circles.length;
-    const today = new Date().toISOString().split("T")[0];
+    const today = isTerm()
+      ? toIsoDate(new Date())
+      : new Date().toISOString().split("T")[0];
     const todaysRecords = window.db.dailyRecords.filter(
       (r) => r.date === today && students.find((s) => s.id === r.studentId),
     );
@@ -1269,18 +1688,35 @@ document.addEventListener("DOMContentLoaded", () => {
         : 0;
     if (avgProgress > 100) avgProgress = 100;
 
-    const totalMemorizedHadiths = students.reduce((acc, s) => {
-      let highestMem = parseInt(s.manualProgress?.mem) || 0;
-      if (highestMem === 0 && s.detailedProgress?.mem?.length > 0) {
-        highestMem = Math.max(...student.detailedProgress.mem);
-      }
-      return acc + highestMem;
-    }, 0);
+    let totalMemorizedHadiths = 0;
+    let behindCard = "";
+    if (isTerm()) {
+      // الفصل الأول: الإنجاز والمواكبة على الحفظ فقط
+      let behindCount = 0;
+      let pctSum = 0;
+      students.forEach((s) => {
+        totalMemorizedHadiths += termMemCount(s);
+        pctSum += termMemPercent(s);
+        const st = termMemStatus(s);
+        if (st && st.behind > 0) behindCount++;
+      });
+      avgProgress =
+        students.length > 0 ? Math.round(pctSum / students.length) : 0;
+      behindCard = `<div class="stat-card" style="border-bottom-color:#991b1b;"><h3>متأخرون في الحفظ عن الخطة</h3><p class="stat-value" style="color:#991b1b;">${behindCount}</p></div>`;
+    } else {
+      totalMemorizedHadiths = students.reduce((acc, s) => {
+        let highestMem = parseInt(s.manualProgress?.mem) || 0;
+        if (highestMem === 0 && s.detailedProgress?.mem?.length > 0) {
+          highestMem = Math.max(...student.detailedProgress.mem);
+        }
+        return acc + highestMem;
+      }, 0);
+    }
 
     if (isTeacher) {
-      dashGrid.innerHTML = `<div class="stat-card"><h3>${teacherCircles.length > 1 ? `طلاب حلقاتي (${teacherCircles.length} حلقات)` : "طلاب حلقتي"}</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div>`;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>${teacherCircles.length > 1 ? `طلاب حلقاتي (${teacherCircles.length} حلقات)` : "طلاب حلقتي"}</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div>${behindCard}`;
     } else {
-      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>`;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>${behindCard}`;
     }
   }
 
@@ -1364,7 +1800,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (trackingFilter) {
       const ids =
         currentUser && currentUser.role === "teacher" ? myCircleIds() : [];
-      if (ids.length > 1) {
+      if (currentUser && currentUser.role !== "teacher" && isTerm()) {
+        // المدير والمشرف في الفصل: اختيار الحلقة (تُعرض حلقة واحدة افتراضياً لتخفيف الصفحة)
+        const prevVal = trackingFilter.value;
+        trackingFilter.innerHTML =
+          window.db.circles
+            .map((c) => `<option value="${c.id}">${c.name}</option>`)
+            .join("") +
+          '<option value="none">طلاب بدون حلقة</option><option value="all">كل الطلاب</option>';
+        if (
+          prevVal &&
+          Array.from(trackingFilter.options).some((o) => o.value === prevVal)
+        )
+          trackingFilter.value = prevVal;
+        trackingFilter.style.display = "block";
+      } else if (ids.length > 1) {
         const prevVal = trackingFilter.value;
         trackingFilter.innerHTML = '<option value="all">كل حلقاتي</option>';
         window.db.circles
@@ -1406,20 +1856,73 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const trackName = document.getElementById("track-name-input").value;
       const newId = "t" + Date.now();
-      window.db.tracks.push({
+      const newTrack = {
         id: newId,
         name: trackName,
         totalDays: 23,
         totalHadiths: 150,
         createdAt: Date.now(),
-      });
-      window.db.scheduleData[newId] = emptySchedule(23);
+      };
+      if (isTerm()) {
+        // خطة الفصل بالأسابيع: كل أسبوع 4 أيام (الأحد إلى الأربعاء)
+        const weeks =
+          parseInt(document.getElementById("track-weeks-input").value) || 12;
+        newTrack.totalDays = Math.min(60, Math.max(1, weeks)) * 4;
+        newTrack.programId = TERM;
+        const start = termStartDate();
+        if (start) newTrack.startDate = start;
+      }
+      window.db.tracks.push(newTrack);
+      window.db.scheduleData[newId] = emptySchedule(newTrack.totalDays);
       e.target.reset();
       saveLocalDB();
       refreshAllViews();
       const ok = await saveTrackToFirestore(newId);
       trackSaveAlert(ok, "تم حفظ المسار في قاعدة البيانات!");
       addLog(`إنشاء مسار جديد: ${trackName}`, "عام");
+    });
+  }
+
+  // تاريخ بداية خطة الفصل (أول جمعة)، محفوظ مع مسارات الفصل
+  function termStartDate() {
+    const t = (programs ? programs[TERM].tracks : []).find((x) => x.startDate);
+    return t ? t.startDate : "";
+  }
+
+  function renderTermStartInfo() {
+    const input = document.getElementById("term-start-input");
+    const info = document.getElementById("term-start-info");
+    if (!input || !info) return;
+    const start = termStartDate();
+    if (document.activeElement !== input) input.value = start;
+    const d = parseIsoDate(start);
+    info.textContent = d
+      ? `بداية الخطة: ${hijriDate(start)}`
+      : "لم يتم تحديد تاريخ بداية الخطة بعد، ولن تظهر المواكبة حتى يُحدد.";
+  }
+
+  const termStartForm = document.getElementById("term-start-form");
+  if (termStartForm) {
+    termStartForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!isTerm()) return;
+      const value = document.getElementById("term-start-input").value;
+      const d = parseIsoDate(value);
+      if (!d) return alert("الرجاء اختيار التاريخ.");
+      if (d.getDay() !== 5)
+        return alert("⚠️ التاريخ المختار ليس يوم جمعة. اختر تاريخ أول جمعة في الدورة.");
+      const termTracks = window.db.tracks;
+      if (termTracks.length === 0)
+        return alert("أضف مسارات الفصل أولاً، ثم حدد تاريخ البداية.");
+      termTracks.forEach((t) => (t.startDate = value));
+      saveLocalDB();
+      refreshAllViews();
+      let allOk = true;
+      for (const t of termTracks) {
+        if (!(await saveTrackToFirestore(t.id))) allOk = false;
+      }
+      trackSaveAlert(allOk, "تم حفظ تاريخ بداية الخطة لكل مسارات الفصل.");
+      addLog(`تحديد بداية خطة الفصل: ${value}`, "عام");
     });
   }
 
@@ -1449,6 +1952,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tasksTiming: { mem: {}, cons: {}, rev: {} },
       };
 
+      stampProgram(newStudent);
       window.db.students.push(newStudent);
       e.target.reset();
 
@@ -1544,45 +2048,83 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  function findHeaderIndex(headerRow, names) {
-    const normed = headerRow.map((h) => normAr(h));
-    for (const name of names) {
-      const i = normed.indexOf(normAr(name));
-      if (i > -1) return i;
-    }
-    for (const name of names) {
-      const i = normed.findIndex((h) => h && h.includes(normAr(name)));
-      if (i > -1) return i;
-    }
-    return -1;
+  // أسماء الأعمدة المقبولة: مطابقة تامة أولاً، ثم عنوان يحتوي الكلمة (مع تجنب أعمدة ولي الأمر ونحوها)
+  const IMPORT_COLUMNS = [
+    ["name", ["الاسم", "اسم الطالب", "الاسم الرباعي", "الاسم الكامل", "اسم المستفيد", "الطالب", "المستفيد"], ["اسم"], ["ولي", "الاب", "الام", "مسار", "حلقه", "معلم", "مدرسه"]],
+    ["idNumber", ["رقم الهوية", "الهوية", "الهوية الوطنية", "السجل المدني", "رقم السجل المدني", "رقم الإقامة", "الإقامة"], ["هويه", "سجل مدني", "السجل المدني", "اقامه"], ["ولي", "الاب", "الام"]],
+    ["phone", ["رقم الجوال", "الجوال", "جوال الطالب", "رقم جوال الطالب", "الهاتف", "رقم الهاتف", "هاتف الطالب", "الموبايل", "رقم التواصل", "جوال"], ["جوال", "هاتف", "موبايل", "تواصل"], ["ولي", "الاب", "الام"]],
+    ["level", ["المرحلة", "المرحلة الدراسية", "الصف", "الصف الدراسي", "المستوى الدراسي"], ["مرحله", "الصف"], []],
+    ["track", ["المسار", "اسم المسار"], ["مسار"], []],
+    ["circle", ["الحلقة", "اسم الحلقة"], ["حلقه"], []],
+    ["pin", ["الرقم السري", "كلمة المرور", "الرمز السري", "كلمة السر"], ["سري", "مرور", "كلمه السر"], []],
+  ];
+
+  function mapImportColumns(headerRow) {
+    const normed = (headerRow || []).map((h) => normAr(h));
+    const taken = [];
+    const find = (exact, contains, avoid) => {
+      for (const name of exact) {
+        const i = normed.findIndex(
+          (h, idx) => h === normAr(name) && !taken.includes(idx),
+        );
+        if (i > -1) return i;
+      }
+      for (const word of contains) {
+        const i = normed.findIndex(
+          (h, idx) =>
+            h &&
+            !taken.includes(idx) &&
+            h.includes(normAr(word)) &&
+            !avoid.some((a) => h.includes(normAr(a))),
+        );
+        if (i > -1) return i;
+      }
+      return -1;
+    };
+    const col = {};
+    IMPORT_COLUMNS.forEach(([key, exact, contains, avoid]) => {
+      col[key] = find(exact, contains, avoid);
+      // إن لم يوجد إلا جوال ولي الأمر يُستخدم
+      if (key === "phone" && col.phone === -1) col.phone = find([], contains, []);
+      if (col[key] > -1) taken.push(col[key]);
+    });
+    return col;
   }
 
-  function parseImportSheet(rows) {
-    // البحث عن صف العناوين في أول 10 صفوف
-    let headerIdx = rows
-      .slice(0, 10)
-      .findIndex((r) => findHeaderIndex(r, ["الاسم", "اسم الطالب"]) > -1);
-    if (headerIdx === -1) return null;
-    const header = rows[headerIdx];
-    const col = {
-      name: findHeaderIndex(header, ["الاسم", "اسم الطالب", "الاسم الرباعي"]),
-      phone: findHeaderIndex(header, ["رقم الجوال", "الجوال", "الهاتف", "الموبايل"]),
-      idNumber: findHeaderIndex(header, ["رقم الهوية", "الهوية", "السجل المدني", "الإقامة"]),
-      level: findHeaderIndex(header, ["المرحلة", "المرحلة الدراسية"]),
-      track: findHeaderIndex(header, ["المسار"]),
-      circle: findHeaderIndex(header, ["الحلقة"]),
-      pin: findHeaderIndex(header, ["الرقم السري", "كلمة المرور", "الرمز السري"]),
-    };
+  // صف العناوين: أول صف (من أول 10) فيه عمود الاسم أو الجوال أو الهوية،
+  // ومعه عمود آخر، أو يكون عنوانه مطابقاً تماماً (حتى لا يُعتبر عنوان مثل "كشف أسماء الطلاب" صف عناوين)
+  function findImportHeader(rows) {
+    const exactMain = IMPORT_COLUMNS.filter(([key]) =>
+      ["name", "phone", "idNumber"].includes(key),
+    ).flatMap(([, exact]) => exact.map((e) => normAr(e)));
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const col = mapImportColumns(rows[i]);
+      const found = Object.values(col).filter((x) => x > -1).length;
+      const hasMain = col.name > -1 || col.phone > -1 || col.idNumber > -1;
+      const hasExact = (rows[i] || []).some((h) =>
+        exactMain.includes(normAr(h)),
+      );
+      if (hasMain && (found >= 2 || hasExact)) return { headerIdx: i, col };
+    }
+    return null;
+  }
+
+  function parseImportSheet(rows, headerIdx, col) {
     const cell = (r, i) => (i > -1 && r[i] != null ? r[i] : "");
 
     const existingIds = new Set(
       window.db.students.map((s) => toLatinDigits(s.idNumber)).filter(Boolean),
     );
-    const existingPhones = new Set(
-      window.db.students.map((s) => normPhone(s.phone)).filter(Boolean),
-    );
+    const existingPhones = new Map();
+    window.db.students.forEach((s) => {
+      const p = normPhone(s.phone);
+      if (!p) return;
+      if (!existingPhones.has(p)) existingPhones.set(p, new Set());
+      existingPhones.get(p).add(normAr(s.name));
+    });
+    const existingNames = new Set(window.db.students.map((s) => normAr(s.name)));
     const fileIds = new Set();
-    const filePhones = new Set();
+    const filePhones = new Map();
     const result = [];
 
     rows.slice(headerIdx + 1).forEach((r, i) => {
@@ -1591,31 +2133,37 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       const errors = [];
       const warnings = [];
+      let maybeDuplicate = false;
 
       const name = String(cell(r, col.name)).replace(/\s+/g, " ").trim();
+      const nName = normAr(name);
       const phone = normPhone(cell(r, col.phone));
       const idNumber = toLatinDigits(cell(r, col.idNumber)).replace(/\s/g, "");
-      const levelRaw = cell(r, col.level);
+      const levelRaw = String(cell(r, col.level)).trim();
       const trackRaw = String(cell(r, col.track)).trim();
       const circleRaw = String(cell(r, col.circle)).trim();
       const pinCell = cell(r, col.pin);
       let pin = toLatinDigits(pinCell);
-      if (typeof pinCell === "number" && pin.length < 4)
+      if (typeof pinCell === "number" && pin.length > 0 && pin.length < 4)
         pin = pin.padStart(4, "0");
       if (!pin) pin = "1234";
+      else if (!/^\d{4}$/.test(pin)) {
+        warnings.push("الرقم السري غير صالح وسيكون 1234");
+        pin = "1234";
+      }
 
-      if (!name) errors.push("الاسم فارغ");
-      if (!phone) errors.push("رقم الجوال فارغ");
-      else if (phone.length < 7) errors.push("رقم الجوال غير صحيح");
-      if (!/^\d{4}$/.test(pin)) errors.push("الرقم السري يجب أن يكون 4 أرقام");
+      if (!name) warnings.push("بدون اسم");
+      if (phone && phone.length < 7) warnings.push("رقم الجوال قصير");
 
-      const level = matchLevel(levelRaw);
-      if (level === "") errors.push("المرحلة فارغة");
-      else if (level === null) errors.push(`مرحلة غير معروفة: ${levelRaw}`);
+      let level = "غير محدد";
+      if (levelRaw) {
+        const m = matchLevel(levelRaw);
+        if (m) level = m;
+        else warnings.push(`المرحلة (${levelRaw}) غير معروفة وستكون غير محدد`);
+      }
 
       let track = null;
-      if (!trackRaw) errors.push("المسار فارغ");
-      else {
+      if (trackRaw) {
         track =
           window.db.tracks.find((t) => t.id === trackRaw) ||
           window.db.tracks.find((t) => normAr(t.name) === normAr(trackRaw));
@@ -1632,20 +2180,32 @@ document.addEventListener("DOMContentLoaded", () => {
           warnings.push("الحلقة مخصصة لمسار آخر");
       }
 
+      // التكرار: نفس الهوية = نفس الطالب، ونفس الجوال مع نفس الاسم = نفس الطالب
       if (idNumber) {
         if (existingIds.has(idNumber)) errors.push("رقم الهوية مسجل مسبقاً");
         else if (fileIds.has(idNumber)) errors.push("رقم الهوية مكرر في الملف");
       }
-      if (phone && (existingPhones.has(phone) || filePhones.has(phone))) {
-        const where = existingPhones.has(phone) ? "مسجل مسبقاً" : "مكرر في الملف";
-        if (!idNumber)
-          errors.push(`الجوال ${where} (أضف رقم الهوية ليدخل الطالب به)`);
-        else warnings.push(`الجوال ${where}، سيدخل الطالب برقم الهوية`);
+      if (phone) {
+        const inDb = existingPhones.get(phone);
+        const inFile = filePhones.get(phone);
+        if ((inDb && inDb.has(nName)) || (inFile && inFile.has(nName)))
+          errors.push(inDb && inDb.has(nName) ? "الطالب مسجل مسبقاً" : "الطالب مكرر في الملف");
+        else if (inDb || inFile)
+          warnings.push(
+            inDb ? "الجوال مسجل لطالب آخر" : "الجوال مكرر لطالب آخر في الملف",
+          );
+      }
+      if (!phone && !idNumber && name && existingNames.has(nName)) {
+        warnings.push("يوجد طالب مسجل بنفس الاسم");
+        maybeDuplicate = true;
       }
 
       if (errors.length === 0) {
         if (idNumber) fileIds.add(idNumber);
-        if (phone) filePhones.add(phone);
+        if (phone) {
+          if (!filePhones.has(phone)) filePhones.set(phone, new Set());
+          filePhones.get(phone).add(nName);
+        }
       }
 
       result.push({
@@ -1654,31 +2214,40 @@ document.addEventListener("DOMContentLoaded", () => {
         phone,
         idNumber,
         pin,
-        level: level || String(levelRaw),
+        level,
         trackId: track ? track.id : "",
-        trackName: track ? track.name : trackRaw,
+        trackName: track ? track.name : trackRaw || "—",
         circleId: circle ? circle.id : "",
         circleName: circle ? circle.name : circleRaw || "بدون حلقة",
         errors,
         warnings,
+        selected: errors.length === 0 && !maybeDuplicate,
       });
     });
     return result;
   }
 
-  function renderImportPreview() {
-    const tbody = document.getElementById("import-preview-body");
+  function updateImportCounts() {
     const ok = importRows.filter((r) => r.errors.length === 0);
     const bad = importRows.length - ok.length;
+    const chosen = ok.filter((r) => r.selected).length;
     document.getElementById("import-summary").innerHTML =
       `عدد الصفوف في الملف: <strong>${importRows.length}</strong> — ` +
-      `<span style="color:#166534; font-weight:bold;">جاهز للحفظ: ${ok.length}</span>` +
+      `<span style="color:#166534; font-weight:bold;">المحدد للحفظ: ${chosen}</span>` +
       (bad
         ? ` — <span style="color:#991b1b; font-weight:bold;">فيها أخطاء ولن تُحفظ: ${bad}</span>`
         : "") +
-      `<br><span style="color:var(--text-gray); font-size:0.8rem;">لن يتم تعديل أو حذف أي طالب موجود، الإضافة فقط للطلاب الجدد.</span>`;
+      `<br><span style="color:var(--text-gray); font-size:0.8rem;">يمكنك إلغاء تحديد أي صف لا تريد حفظه. لن يتم تعديل أو حذف أي طالب موجود، الإضافة فقط للطلاب الجدد.</span>`;
+    const btn = document.getElementById("import-confirm-btn");
+    btn.disabled = chosen === 0;
+    btn.textContent =
+      chosen > 0 ? `حفظ ${chosen} طالب` : "لا يوجد طلاب محددون للحفظ";
+  }
+
+  function renderImportPreview() {
+    const tbody = document.getElementById("import-preview-body");
     tbody.innerHTML = importRows
-      .map((r) => {
+      .map((r, idx) => {
         const bg = r.errors.length
           ? "#fee2e2"
           : r.warnings.length
@@ -1691,13 +2260,18 @@ document.addEventListener("DOMContentLoaded", () => {
             : `<span style="color:#166534; font-weight:bold;">✅ جاهز</span>`;
         const esc = (v) =>
           String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-        return `<tr style="background:${bg};"><td>${r.rowNum}</td><td style="font-weight:700;">${esc(r.name)}</td><td dir="ltr">${esc(r.phone)}</td><td dir="ltr">${esc(r.idNumber)}</td><td>${esc(r.level)}</td><td style="font-size:0.75rem;">${esc(r.trackName)}</td><td>${esc(r.circleName)}</td><td style="font-size:0.8rem;">${status}</td></tr>`;
+        const check = `<input type="checkbox" class="import-row-check" data-idx="${idx}" style="width:18px; height:18px; accent-color:var(--primary-blue);" ${r.selected ? "checked" : ""} ${r.errors.length ? "disabled" : ""}>`;
+        return `<tr style="background:${bg};"><td style="text-align:center;">${check}</td><td>${r.rowNum}</td><td style="font-weight:700;">${esc(r.name)}</td><td dir="ltr">${esc(r.phone)}</td><td dir="ltr">${esc(r.idNumber)}</td><td>${esc(r.level)}</td><td style="font-size:0.75rem;">${esc(r.trackName)}</td><td>${esc(r.circleName)}</td><td style="font-size:0.8rem;">${status}</td></tr>`;
       })
       .join("");
-    const btn = document.getElementById("import-confirm-btn");
-    btn.disabled = ok.length === 0;
-    btn.textContent =
-      ok.length > 0 ? `حفظ ${ok.length} طالب` : "لا يوجد طلاب جاهزون للحفظ";
+    tbody.querySelectorAll(".import-row-check").forEach((chk) =>
+      chk.addEventListener("change", () => {
+        const row = importRows[parseInt(chk.dataset.idx)];
+        if (row) row.selected = chk.checked;
+        updateImportCounts();
+      }),
+    );
+    updateImportCounts();
     document.getElementById("import-modal").classList.add("active");
   }
 
@@ -1725,18 +2299,30 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const data = await file.arrayBuffer();
         const wb = XLSX.read(data, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, {
-          header: 1,
-          defval: "",
-          raw: true,
-        });
-        const parsed = parseImportSheet(rows);
-        if (!parsed)
+        // البحث في كل صفحات الملف عن جدول الطلاب (مع تجاهل صفحة القوائم في النموذج)
+        let parsed = null;
+        let foundHeader = false;
+        for (const sheetName of wb.SheetNames) {
+          if (sheetName === "القوائم والتعليمات") continue;
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+            header: 1,
+            defval: "",
+            raw: true,
+          });
+          const h = findImportHeader(rows);
+          if (!h) continue;
+          foundHeader = true;
+          const sheetRows = parseImportSheet(rows, h.headerIdx, h.col);
+          if (sheetRows.length > 0) {
+            parsed = sheetRows;
+            break;
+          }
+        }
+        if (!foundHeader)
           return alert(
-            "لم يتم العثور على عمود (الاسم) في الصفحة الأولى من الملف.\nاستخدم زر (تحميل نموذج Excel) لمعرفة الشكل المطلوب.",
+            "لم يتم العثور على جدول الطلاب في الملف.\nيجب أن يحتوي على صف عناوين مثل: الاسم، رقم الجوال، المسار.\nاستخدم زر (تحميل نموذج Excel) لمعرفة الشكل المطلوب.",
           );
-        if (parsed.length === 0) return alert("الملف لا يحتوي على طلاب.");
+        if (!parsed) return alert("الملف لا يحتوي على طلاب.");
         importRows = parsed;
         renderImportPreview();
       } catch (e) {
@@ -1749,7 +2335,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const importConfirmBtn = document.getElementById("import-confirm-btn");
   if (importConfirmBtn) {
     importConfirmBtn.addEventListener("click", async () => {
-      const ready = importRows.filter((r) => r.errors.length === 0);
+      const ready = importRows.filter(
+        (r) => r.errors.length === 0 && r.selected,
+      );
       if (ready.length === 0) return;
       if (typeof dbFirestore === "undefined" || !navigator.onLine)
         return alert("الاستيراد يحتاج اتصالاً بالإنترنت، حاول مرة أخرى بعد الاتصال.");
@@ -1757,7 +2345,7 @@ document.addEventListener("DOMContentLoaded", () => {
       importConfirmBtn.disabled = true;
       importConfirmBtn.textContent = "جاري الحفظ...";
       const base = Date.now();
-      const newStudents = ready.map((r, i) => ({
+      const newStudents = ready.map((r, i) => stampProgram({
         id: "s" + (base + i),
         name: r.name,
         idNumber: r.idNumber,
@@ -1846,10 +2434,8 @@ document.addEventListener("DOMContentLoaded", () => {
         ]);
       lists.push([]);
       lists.push(["ملاحظات:"]);
-      lists.push(["- الأعمدة الإلزامية: الاسم، رقم الجوال، المرحلة، المسار."]);
-      lists.push(["- الحلقة اختيارية (إن تُركت فارغة يبقى الطالب بدون حلقة)."]);
-      lists.push(["- الرقم السري اختياري (إن تُرك فارغاً يكون 1234)."]);
       lists.push(["- اكتب اسم المسار والحلقة كما هو في هذه القائمة."]);
+      lists.push(["- الرقم السري الافتراضي للدخول: 1234"]);
       const ws2 = XLSX.utils.aoa_to_sheet(lists);
       ws2["!cols"] = [{ wch: 18 }, { wch: 45 }, { wch: 25 }];
       XLSX.utils.book_append_sheet(wb, ws2, "القوائم والتعليمات");
@@ -1873,6 +2459,7 @@ document.addEventListener("DOMContentLoaded", () => {
         circleId: "",
         role: "teacher",
       };
+      stampProgram(newTeacher);
       window.db.users.teacher.push(newTeacher);
       e.target.reset();
 
@@ -1905,6 +2492,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pin: document.getElementById("supervisor-pin").value,
         role: "supervisor",
       };
+      stampProgram(newSup);
       window.db.users.supervisor.push(newSup);
       e.target.reset();
 
@@ -1962,6 +2550,7 @@ document.addEventListener("DOMContentLoaded", () => {
         teacherId: teacherId,
         trackId: trackId,
       };
+      stampProgram(newCircle);
       window.db.circles.push(newCircle);
 
       // المعلم يحتفظ بحلقاته السابقة، وتضاف له هذه الحلقة
@@ -2068,6 +2657,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTracks() {
+    renderTermStartInfo();
     const tbody = document.getElementById("tracks-list-body");
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -2421,27 +3011,79 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   let editingScheduleTrackId = null;
+  // نسخة للتعديل: لا يتغير شيء في المقررات إلا عند الضغط على حفظ
+  let editingSched = [];
+
+  function renderScheduleRows() {
+    const tbody = document.getElementById("schedule-modal-tbody");
+    const esc = (v) =>
+      String(v == null ? "" : v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+    tbody.innerHTML = editingSched
+      .map(
+        (item) => `
+        <tr>
+          <td style="font-weight:bold; background:var(--primary-light); width:150px; text-align:center;">${getDateLabel(item.day, editingScheduleTrackId)}</td>
+          <td><input type="text" id="sch_mem_${item.day}" value="${esc(item.mem)}"></td>
+          <td><input type="text" id="sch_cons_${item.day}" value="${esc(item.cons)}"></td>
+          <td><input type="text" id="sch_rev_${item.day}" value="${esc(item.rev)}"></td>
+        </tr>
+      `,
+      )
+      .join("");
+  }
+
+  function readScheduleInputs() {
+    editingSched.forEach((item) => {
+      const m = document.getElementById(`sch_mem_${item.day}`);
+      if (!m) return;
+      item.mem = m.value;
+      item.cons = document.getElementById(`sch_cons_${item.day}`).value;
+      item.rev = document.getElementById(`sch_rev_${item.day}`).value;
+    });
+  }
+
   window.openScheduleModal = function (trackId) {
     editingScheduleTrackId = trackId;
     const track = window.db.tracks.find((t) => t.id === trackId);
     if (!track) return;
     document.getElementById("schedule-modal-title").textContent =
       `تعديل مقررات: ${track.name}`;
-    const tbody = document.getElementById("schedule-modal-tbody");
-    tbody.innerHTML = "";
-    const sched = window.db.scheduleData[trackId] || [];
-    sched.forEach((item) => {
-      tbody.innerHTML += `
-        <tr>
-          <td style="font-weight:bold; background:var(--primary-light); width:150px; text-align:center;">${getDateLabel(item.day)}</td>
-          <td><input type="text" id="sch_mem_${item.day}" value="${item.mem}"></td>
-          <td><input type="text" id="sch_cons_${item.day}" value="${item.cons}"></td>
-          <td><input type="text" id="sch_rev_${item.day}" value="${item.rev}"></td>
-        </tr>
-      `;
-    });
+    editingSched = (window.db.scheduleData[trackId] || []).map((d) => ({
+      ...d,
+    }));
+    const weeksBar = document.getElementById("schedule-weeks-bar");
+    if (weeksBar) {
+      weeksBar.style.display = isTerm() ? "flex" : "none";
+      document.getElementById("schedule-weeks-input").value = Math.ceil(
+        editingSched.length / 4,
+      );
+    }
+    renderScheduleRows();
     document.getElementById("schedule-modal").classList.add("active");
   };
+
+  const weeksApplyBtn = document.getElementById("schedule-weeks-apply");
+  if (weeksApplyBtn) {
+    weeksApplyBtn.addEventListener("click", () => {
+      const weeks = parseInt(
+        document.getElementById("schedule-weeks-input").value,
+      );
+      if (!weeks || weeks < 1 || weeks > 60)
+        return alert("عدد الأسابيع يجب أن يكون من 1 إلى 60.");
+      readScheduleInputs();
+      const newDays = weeks * 4;
+      const removed = editingSched.slice(newDays);
+      if (
+        removed.some((d) => (d.mem || d.cons || d.rev || "").trim()) &&
+        !confirm("سيتم حذف مقررات الأسابيع الزائدة من هذه الخطة. متابعة؟")
+      )
+        return;
+      editingSched = editingSched.slice(0, newDays);
+      for (let i = editingSched.length; i < newDays; i++)
+        editingSched.push({ day: i + 1, mem: "", cons: "", rev: "" });
+      renderScheduleRows();
+    });
+  }
 
   window.closeScheduleModal = function () {
     document.getElementById("schedule-modal").classList.remove("active");
@@ -2452,14 +3094,27 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("submit", async (e) => {
       e.preventDefault();
       const trackId = editingScheduleTrackId;
-      const sched = window.db.scheduleData[trackId];
+      let sched = window.db.scheduleData[trackId];
       if (sched) {
-        sched.forEach((item) => {
-          item.mem = document.getElementById(`sch_mem_${item.day}`).value;
-          item.cons = document.getElementById(`sch_cons_${item.day}`).value;
-          item.rev = document.getElementById(`sch_rev_${item.day}`).value;
-        });
+        readScheduleInputs();
+        sched = editingSched.map((d) => ({ ...d }));
+        window.db.scheduleData[trackId] = sched;
         const t = window.db.tracks.find((x) => x.id === editingScheduleTrackId);
+        if (t && isTerm()) {
+          t.totalDays = sched.length;
+          // عدد الأحاديث من أكبر رقم في الخطة (لشبكة الأحاديث عند التسجيل)
+          let maxNum = 0;
+          sched.forEach((d) =>
+            ["mem", "cons", "rev"].forEach((k) => {
+              const nums = toLatinDigits(d[k]).match(/\d+/g);
+              if (nums)
+                nums.forEach((n) => {
+                  if (+n > maxNum) maxNum = +n;
+                });
+            }),
+          );
+          if (maxNum > 0) t.totalHadiths = maxNum;
+        }
         addLog(`تعديل مقررات المسار`, t ? t.name : "عام");
       }
       closeScheduleModal();
@@ -2486,6 +3141,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedDate =
       document.getElementById("admin-record-date").value ||
       new Date().toISOString().split("T")[0];
+    const adminHijri = document.getElementById("admin-record-date-hijri");
+    if (adminHijri) adminHijri.textContent = hijriDate(selectedDate);
     const searchInputEl = document.getElementById("admin-student-search");
     const searchVal = searchInputEl ? searchInputEl.value.toLowerCase() : "";
     let filteredStudents = window.db.students;
@@ -2510,8 +3167,12 @@ document.addEventListener("DOMContentLoaded", () => {
           r.studentId === student.id &&
           (r.attendance === "present" || r.attendance === "late"),
       ).length;
+      // في الفصل: الحضور من أيام الحلقة التي مضت، والإنجاز على الحفظ فقط
+      const attendanceBase = isTerm() ? termDueDates(track) : currentDay;
       let attendancePercent =
-        currentDay > 0 ? Math.round((presentRecords / currentDay) * 100) : 0;
+        attendanceBase > 0
+          ? Math.round((presentRecords / attendanceBase) * 100)
+          : 0;
       if (attendancePercent > 100) attendancePercent = 100;
 
       const totalTasks = track.totalDays * 3;
@@ -2522,6 +3183,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let progressPercent =
         totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       if (progressPercent > 100) progressPercent = 100;
+      if (isTerm()) progressPercent = termMemPercent(student);
 
       const selectHtml = `
         <select class="modern-input" style="padding: 0.3rem; min-height: auto; font-size:0.8rem;" onchange="adminUpdateAttendance('${student.id}', this.value)">
@@ -2573,6 +3235,7 @@ document.addEventListener("DOMContentLoaded", () => {
         notes: "تعديل حضور إداري",
         timestamp: Date.now(),
       };
+      stampProgram(newRecord);
       window.db.dailyRecords.push(newRecord);
       syncToFirestore(
         "dailyRecords",
@@ -2604,7 +3267,9 @@ document.addEventListener("DOMContentLoaded", () => {
     tbody.innerHTML = "";
     const dateInput = document.getElementById("report-date-input").value;
     document.getElementById("report-table-title").textContent =
-      `تقرير الإنجاز والمتابعة (يوم: ${dateInput})`;
+      `تقرير الإنجاز والمتابعة (يوم: ${isTerm() ? hijriDate(dateInput) : dateInput})`;
+    const reportHijri = document.getElementById("report-date-hijri");
+    if (reportHijri) reportHijri.textContent = hijriDate(dateInput);
 
     let studentsToReport = window.db.students;
     if (currentUser.role === "teacher") {
@@ -2624,6 +3289,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     let totalReportHadiths = 0;
+    let totalReportPages = 0;
 
     studentsToReport.forEach((student) => {
       const record = dayRecords.find((r) => r.studentId === student.id);
@@ -2663,24 +3329,51 @@ document.addEventListener("DOMContentLoaded", () => {
       if (highestMem === 0 && student.detailedProgress?.mem?.length > 0) {
         highestMem = Math.max(...student.detailedProgress.mem);
       }
+      if (isTerm()) highestMem = termMemCount(student);
 
       totalReportHadiths += highestMem;
 
-      const totalHadithsStr = track.totalHadiths
+      let totalHadithsStr = track.totalHadiths
         ? `${highestMem} من أصل ${track.totalHadiths}`
         : `${highestMem}`;
+      if (isTerm()) {
+        // الفصل: ما حفظه من خطته، وآخر حديث وصل إليه
+        const range = termPlanRange(student.trackId);
+        const reached = reachedHadith(student, "mem");
+        totalHadithsStr = range.last
+          ? `${highestMem} من أصل ${range.last - range.first + 1}`
+          : `${highestMem}`;
+        if (reached)
+          totalHadithsStr += `<br><span style="font-size:0.75rem; color:var(--text-gray);">وصل إلى ح ${reached}</span>`;
+        const st = termMemStatus(student);
+        if (st)
+          totalHadithsStr += `<br><span style="font-size:0.75rem; font-weight:bold; color:${st.behind > 0 ? "#991b1b" : "#166534"};">${st.behind > 0 ? `متأخر في الحفظ (${sessionsText(st.behind)})` : "مواكب للخطة"}</span>`;
+      }
 
       const manualStr = student.manualProgress
         ? ` (ح:${student.manualProgress?.mem || 0}, ث:${student.manualProgress?.cons || 0}, م:${student.manualProgress?.rev || 0})`
         : "";
-      const timeStr =
+      let timeStr =
         record && record.sessionTime && record.sessionTime !== "غير محدد"
           ? ` | وقت: ${record.sessionTime}`
           : "";
+      if (isTerm() && record)
+        timeStr =
+          (record.recitedAt
+            ? ` | وقت التسميع: ${formatRecitedAt(record.recitedAt)}`
+            : "") + (record.isReview ? " | 🔁 مراجعة" : "");
       const tasksCompleted = record
         ? `أيام المنهج: ${student.progress?.mem?.length || 0}/${student.progress?.cons?.length || 0}/${student.progress?.rev?.length || 0}${manualStr}${timeStr}`
         : "لا يوجد إنجاز جديد";
       const notesStr = record && record.notes ? record.notes : "-";
+      let pagesStr = "-";
+      if (isTerm()) {
+        const pages = termPagesDone(student);
+        if (pages !== null) {
+          pagesStr = pagesText(pages);
+          totalReportPages += pages;
+        }
+      }
 
       tbody.innerHTML += `<tr>
         <td style="font-weight:700;">${student.name}</td>
@@ -2689,6 +3382,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td style="font-weight:bold; color:var(--primary-blue); text-align:center;">${totalAttendedDays}</td>
         <td style="font-size:0.8rem;">${tasksCompleted}</td>
         <td style="font-weight:bold; color:var(--primary-blue);" dir="rtl">${totalHadithsStr}</td>
+        ${isTerm() ? `<td style="font-weight:bold; color:var(--primary-blue); text-align:center;">${pagesStr}</td>` : ""}
         <td>${notesStr}</td>
       </tr>`;
     });
@@ -2697,7 +3391,7 @@ document.addEventListener("DOMContentLoaded", () => {
       tbody.innerHTML += `
         <tr style="background-color: var(--primary-light); border-top: 2px solid var(--primary-blue);">
           <td colspan="5" style="text-align: left; font-weight: 800; color: var(--primary-blue); font-size: 1rem; padding: 12px;">إجمالي الأحاديث المسمّعة للطلاب أعلاه:</td>
-          <td colspan="2" style="font-weight: 900; color: var(--danger-btn); font-size: 1.1rem; padding: 12px;">${totalReportHadiths} حديثاً</td>
+          <td colspan="${isTerm() ? 3 : 2}" style="font-weight: 900; color: var(--danger-btn); font-size: 1.1rem; padding: 12px;">${totalReportHadiths} حديثاً${isTerm() ? ` — ${pagesText(totalReportPages)}` : ""}</td>
         </tr>`;
     }
   }
@@ -2722,6 +3416,28 @@ document.addEventListener("DOMContentLoaded", () => {
     trackingCircleFilter.addEventListener("change", () => {
       renderDailyTracking(searchInput ? searchInput.value.toLowerCase() : "");
     });
+  const trackingDateInput = document.getElementById("tracking-date");
+  if (trackingDateInput)
+    trackingDateInput.addEventListener("change", () => {
+      // لا يُسجَّل لتاريخ لم يأتِ بعد
+      trackingDateInput.value = selectedTrackingDate();
+      renderDailyTracking(searchInput ? searchInput.value.toLowerCase() : "");
+    });
+
+  // تاريخ التسجيل في الفصل: اليوم، أو أي يوم سابق يختاره المعلم أو المشرف أو المدير
+  function selectedTrackingDate() {
+    const todayLocal = toIsoDate(new Date());
+    const v = trackingDateInput ? trackingDateInput.value : "";
+    return parseIsoDate(v) && v <= todayLocal ? v : todayLocal;
+  }
+
+  // وقت التسميع: الفصل يحفظ وقتاً فعلياً، والصيفية تحفظ (فجر / عصر)
+  function timingHtml(t) {
+    if (!t) return "";
+    if (typeof t === "number")
+      return `<span style="font-size:0.65rem; color:#0369a1; margin-right:4px;">(${formatRecitedAt(t)})</span>`;
+    return `<span style="font-size:0.65rem; color:${t === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${t})</span>`;
+  }
 
   function setupDetailedSync(card, student, type) {
     const manualInput = card.querySelector(`input[name="manual_${type}"]`);
@@ -2729,7 +3445,7 @@ document.addEventListener("DOMContentLoaded", () => {
       `input[name="det_${type}_${student.id}"]`,
     );
     const quickChecks = card.querySelectorAll(`input[name^="chk_${type}_"]`);
-    if (!manualInput || detChecks.length === 0) return;
+    if (!manualInput || (detChecks.length === 0 && !isTerm())) return;
 
     const updateManualFromChecks = () => {
       let max = 0;
@@ -2796,6 +3512,14 @@ document.addEventListener("DOMContentLoaded", () => {
         filteredStudents = filteredStudents.filter(
           (s) => s.circleId === circleFilter.value,
         );
+    } else if (isTerm()) {
+      const f = document.getElementById("tracking-circle-filter").value;
+      if (f === "none")
+        filteredStudents = filteredStudents.filter(
+          (s) => !window.db.circles.find((c) => c.id === s.circleId),
+        );
+      else if (f && f !== "all")
+        filteredStudents = filteredStudents.filter((s) => s.circleId === f);
     }
     if (searchTerm)
       filteredStudents = filteredStudents.filter((s) =>
@@ -2809,6 +3533,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const currentProgramDay = getCurrentProgramDay();
+    const trackingHijri = document.getElementById("tracking-date-hijri");
+    if (trackingHijri && isTerm())
+      trackingHijri.textContent = hijriDate(selectedTrackingDate());
     filteredStudents.forEach((student) => {
       if (!student.progress) student.progress = { mem: [], cons: [], rev: [] };
       if (!student.manualProgress)
@@ -2818,12 +3545,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!student.tasksTiming)
         student.tasksTiming = { mem: {}, cons: {}, rev: {} };
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = isTerm()
+        ? selectedTrackingDate()
+        : new Date().toISOString().split("T")[0];
       const record = window.db.dailyRecords.find(
         (r) => r.studentId === student.id && r.date === today,
       );
       let isEditable = true;
-      if (record && currentUser.role === "teacher") {
+      // الفصل: لا يُقفل التعديل بعد 24 ساعة
+      if (record && currentUser.role === "teacher" && !isTerm()) {
         const hoursPassed = (Date.now() - record.timestamp) / (1000 * 60 * 60);
         if (hoursPassed > 24) isEditable = false;
       }
@@ -2840,7 +3570,8 @@ document.addEventListener("DOMContentLoaded", () => {
           : 0;
       let delayDays = currentProgramDay - maxMem;
       let progressBadge = "";
-      if (delayDays <= 0)
+      if (isTerm()) progressBadge = memBadgeHtml(termMemStatus(student));
+      else if (delayDays <= 0)
         progressBadge = `<span class="badge" style="background:#dcfce7; color:#166534; border:1px solid #166534;">🌟 مواكب للخطة</span>`;
       else if (delayDays <= 2)
         progressBadge = `<span class="badge" style="background:#fef3c7; color:#b45309; border:1px solid #b45309;">⚠️ متأخر (${delayDays} يوم)</span>`;
@@ -2848,8 +3579,13 @@ document.addEventListener("DOMContentLoaded", () => {
         progressBadge = `<span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #991b1b;">🚨 متأخر جداً (${delayDays} يوم)</span>`;
 
       const statusBadge = record
-        ? `<span class="badge saved">تم حفظ إنجاز اليوم</span>`
+        ? `<span class="badge saved">${isTerm() ? "تم التسجيل لهذا التاريخ" : "تم حفظ إنجاز اليوم"}</span>`
         : `<span class="badge" style="background:#f8fafc; border:1px solid var(--border-color); color:var(--text-gray);">لم يتم الحفظ</span>`;
+
+      // الفصل: الأيام قبل الجلسة الحالية منتهية، والحالية هي التي لم ينته وقتها
+      const termDue = isTerm() ? termDueCount(track) : 0;
+      const pastLimit = isTerm() ? termDue : currentProgramDay - 1;
+      const currentIdx = isTerm() ? termDue + 1 : currentProgramDay;
 
       let timelineHTML =
         '<div class="timeline-container"><div class="timeline-scroll">';
@@ -2871,22 +3607,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const consTime = student.tasksTiming?.cons?.["day_" + i];
         const revTime = student.tasksTiming?.rev?.["day_" + i];
 
-        const memTimeHtml = memTime
-          ? `<span style="font-size:0.65rem; color:${memTime === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${memTime})</span>`
-          : "";
-        const consTimeHtml = consTime
-          ? `<span style="font-size:0.65rem; color:${consTime === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${consTime})</span>`
-          : "";
-        const revTimeHtml = revTime
-          ? `<span style="font-size:0.65rem; color:${revTime === "فجر" ? "#0284c7" : "#b45309"}; margin-right:4px;">(${revTime})</span>`
-          : "";
+        const memTimeHtml = timingHtml(memTime);
+        const consTimeHtml = timingHtml(consTime);
+        const revTimeHtml = timingHtml(revTime);
 
         let dayClass = "day-column";
-        if (i < currentProgramDay) dayClass += " day-past";
-        else if (i === currentProgramDay) dayClass += " day-current";
+        if (i <= pastLimit) dayClass += " day-past";
+        else if (i === currentIdx) dayClass += " day-current";
         timelineHTML += `
           <div class="${dayClass}">
-            <h4>${getDateLabel(i)}</h4>
+            <h4>${getDateLabel(i, student.trackId)}</h4>
             <label class="task-item"><input type="checkbox" name="chk_mem_${i}" value="${i}" ${isMemChecked} ${disableStr}>
               <div class="task-content"><span class="task-label">📖 حفظ: ${memTimeHtml}</span><span class="task-desc">${memText}</span></div></label>
             <label class="task-item"><input type="checkbox" name="chk_cons_${i}" value="${i}" ${isConsChecked} ${disableStr}>
@@ -2929,6 +3659,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       revGrid += `</div></div>`;
       dropdownHTML += memGrid + consGrid + revGrid + `</div></details>`;
+      // الفصل: الخطط كبيرة (حتى 1684 حديثاً)، والتسجيل برقم الحديث يكفي
+      if (isTerm()) dropdownHTML = "";
 
       let manualInputHTML = `
         <div class="manual-input-grid">
@@ -2937,6 +3669,21 @@ document.addEventListener("DOMContentLoaded", () => {
           <div><label>أين وصل في المراجعة؟</label><input type="number" name="manual_rev" class="modern-input" placeholder="رقم الحديث" value="${student.manualProgress?.rev || ""}" ${disableStr}></div>
         </div>
       `;
+
+      // الفصل: وقت التسميع يُسجَّل تلقائياً ويمكن تعديله، وعلامة المراجعة يوم السبت
+      const recDay = parseIsoDate(today);
+      const isSaturday = isTerm() && recDay && recDay.getDay() === 6;
+      const sessionTimeHtml = isTerm()
+        ? `<div class="status-radios" style="align-items:center;"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
+              <input type="datetime-local" name="recited_at" class="modern-input" style="width:auto; padding:0.3rem 0.5rem; min-height:auto; font-size:0.85rem;" value="${record && record.recitedAt ? toLocalInputValue(record.recitedAt) : ""}" ${disableStr}>
+              <span style="font-size:0.75rem; color:var(--text-gray);">${record && record.recitedAt ? `سُجّل: ${formatRecitedAt(record.recitedAt)}${record.recordedBy ? ` (${record.recordedBy})` : ""} — يمكن تعديله` : "يُسجَّل تلقائياً عند الحفظ"}</span>
+            </div>
+            ${isSaturday ? `<label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; font-weight:800; color:#7c3aed; cursor:pointer; width:fit-content;"><input type="checkbox" name="is_review" style="width:18px; height:18px; accent-color:#7c3aed;" ${record && record.isReview ? "checked" : ""} ${disableStr}> 🔁 هذا التسميع مراجعة</label>` : ""}`
+        : `<div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
+              <div class="status-radio"><input type="radio" id="time_fajr_${student.id}" name="session_time" value="فجر" ${record && record.sessionTime === "فجر" ? "checked" : ""} ${disableStr}><label for="time_fajr_${student.id}">بعد الفجر 🌅</label></div>
+              <div class="status-radio"><input type="radio" id="time_asr_${student.id}" name="session_time" value="عصر" ${record && record.sessionTime === "عصر" ? "checked" : ""} ${disableStr}><label for="time_asr_${student.id}">بعد العصر 🌇</label></div>
+              <div class="status-radio"><input type="radio" id="time_none_${student.id}" name="session_time" value="غير محدد" ${!record || record.sessionTime === "غير محدد" ? "checked" : ""} ${disableStr}><label for="time_none_${student.id}">غير محدد</label></div>
+            </div>`;
 
       const card = document.createElement("div");
       card.className = "tracking-card";
@@ -2950,11 +3697,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="status-radio"><input type="radio" id="excused_${student.id}" name="attendance" value="excused" ${record && record.attendance === "excused" ? "checked" : ""} ${disableStr}><label for="excused_${student.id}">مستأذن</label></div>
               <div class="status-radio"><input type="radio" id="absent_${student.id}" name="attendance" value="absent" ${record && record.attendance === "absent" ? "checked" : ""} ${disableStr}><label for="absent_${student.id}">غائب</label></div>
             </div>
-            <div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
-              <div class="status-radio"><input type="radio" id="time_fajr_${student.id}" name="session_time" value="فجر" ${record && record.sessionTime === "فجر" ? "checked" : ""} ${disableStr}><label for="time_fajr_${student.id}">بعد الفجر 🌅</label></div>
-              <div class="status-radio"><input type="radio" id="time_asr_${student.id}" name="session_time" value="عصر" ${record && record.sessionTime === "عصر" ? "checked" : ""} ${disableStr}><label for="time_asr_${student.id}">بعد العصر 🌇</label></div>
-              <div class="status-radio"><input type="radio" id="time_none_${student.id}" name="session_time" value="غير محدد" ${!record || record.sessionTime === "غير محدد" ? "checked" : ""} ${disableStr}><label for="time_none_${student.id}">غير محدد</label></div>
-            </div>
+            ${sessionTimeHtml}
           </div>
           <div style="display: ${isGlobalManualMode ? "none" : "block"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الخطة الزمنية (متابعة بالأيام):</p>${timelineHTML}</div>
           <div style="display: ${isGlobalManualMode ? "block" : "none"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الإدخال اليدوي الدقيق (متابعة بالأحاديث):</p>${manualInputHTML}${dropdownHTML}</div>
@@ -2972,8 +3715,26 @@ document.addEventListener("DOMContentLoaded", () => {
           .addEventListener("submit", (e) => {
             e.preventDefault();
             const att = e.target.elements["attendance"].value;
-            const sTime = e.target.elements["session_time"].value;
+            const sTimeEl = e.target.elements["session_time"];
+            const sTime = sTimeEl ? sTimeEl.value : "غير محدد";
             const notes = e.target.elements["notes"].value;
+
+            // الفصل: الوقت المكتوب، أو الوقت السابق، أو وقت الحفظ الآن (على تاريخ التسجيل)
+            let recitedAt = null;
+            if (isTerm()) {
+              const v = e.target.elements["recited_at"].value;
+              const parsed = v ? new Date(v).getTime() : NaN;
+              if (!isNaN(parsed)) recitedAt = parsed;
+              else if (record && record.recitedAt) recitedAt = record.recitedAt;
+              else {
+                const now = new Date();
+                const d = parseIsoDate(today);
+                d.setHours(now.getHours(), now.getMinutes(), 0, 0);
+                recitedAt =
+                  today === toIsoDate(now) ? now.getTime() : d.getTime();
+              }
+            }
+            const stamp = isTerm() ? recitedAt : sTime;
 
             const oldMemDays = student.progress.mem || [];
             const oldConsDays = student.progress.cons || [];
@@ -3016,31 +3777,31 @@ document.addEventListener("DOMContentLoaded", () => {
               .querySelectorAll(`input[name="det_rev_${student.id}"]:checked`)
               .forEach((c) => detRev.push(parseInt(c.value)));
 
-            if (sTime !== "غير محدد") {
+            if (isTerm() || sTime !== "غير محدد") {
               newMem
                 .filter((x) => !oldMemDays.includes(x))
-                .forEach((d) => (student.tasksTiming.mem["day_" + d] = sTime));
+                .forEach((d) => (student.tasksTiming.mem["day_" + d] = stamp));
               newCons
                 .filter((x) => !oldConsDays.includes(x))
-                .forEach((d) => (student.tasksTiming.cons["day_" + d] = sTime));
+                .forEach((d) => (student.tasksTiming.cons["day_" + d] = stamp));
               newRev
                 .filter((x) => !oldRevDays.includes(x))
-                .forEach((d) => (student.tasksTiming.rev["day_" + d] = sTime));
+                .forEach((d) => (student.tasksTiming.rev["day_" + d] = stamp));
 
               detMem
                 .filter((x) => !oldDetMem.includes(x))
                 .forEach(
-                  (h) => (student.tasksTiming.mem["hadith_" + h] = sTime),
+                  (h) => (student.tasksTiming.mem["hadith_" + h] = stamp),
                 );
               detCons
                 .filter((x) => !oldDetCons.includes(x))
                 .forEach(
-                  (h) => (student.tasksTiming.cons["hadith_" + h] = sTime),
+                  (h) => (student.tasksTiming.cons["hadith_" + h] = stamp),
                 );
               detRev
                 .filter((x) => !oldDetRev.includes(x))
                 .forEach(
-                  (h) => (student.tasksTiming.rev["hadith_" + h] = sTime),
+                  (h) => (student.tasksTiming.rev["hadith_" + h] = stamp),
                 );
             }
 
@@ -3065,14 +3826,29 @@ document.addEventListener("DOMContentLoaded", () => {
             let existingRecordIndex = window.db.dailyRecords.findIndex(
               (r) => r.studentId === student.id && r.date === today,
             );
-            const newRecord = {
-              studentId: student.id,
-              date: today,
-              attendance: att,
-              sessionTime: sTime,
-              notes,
-              timestamp: Date.now(),
-            };
+            const newRecord = isTerm()
+              ? {
+                  studentId: student.id,
+                  date: today,
+                  attendance: att,
+                  notes,
+                  recitedAt,
+                  isReview: !!(
+                    e.target.elements["is_review"] &&
+                    e.target.elements["is_review"].checked
+                  ),
+                  recordedBy: currentUser.name,
+                  programId: TERM,
+                  timestamp: Date.now(),
+                }
+              : {
+                  studentId: student.id,
+                  date: today,
+                  attendance: att,
+                  sessionTime: sTime,
+                  notes,
+                  timestamp: Date.now(),
+                };
 
             if (existingRecordIndex > -1)
               window.db.dailyRecords[existingRecordIndex] = newRecord;
@@ -3092,6 +3868,164 @@ document.addEventListener("DOMContentLoaded", () => {
           });
       }
       trackingContainer.appendChild(card);
+    });
+  }
+
+  // ================= الكتب (الدورة الفصل الأول) =================
+  function renderBooks() {
+    const list = document.getElementById("books-library-list");
+    if (!list) return;
+    const esc = (v) =>
+      String(v == null ? "" : v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+    list.innerHTML = (window.TERM_BOOKS || [])
+      .map((b) => {
+        const tracks = (b.tracks || [])
+          .map((id) => (window.db.tracks.find((t) => t.id === id) || {}).name)
+          .filter(Boolean);
+        return `<div class="content-card" style="margin:0;">
+          <h3 class="content-card-title">📖 ${esc(b.name)}</h3>
+          <p style="font-size:0.85rem; color:var(--text-gray); line-height:1.7; margin-bottom:1rem;">${tracks.length ? `المسارات: ${tracks.map(esc).join("، ")}` : "كتاب للاطلاع"}</p>
+          <a href="${esc(b.file)}" target="_blank" rel="noopener" class="btn-submit" style="display:block; text-align:center; text-decoration:none; margin:0;">فتح الكتاب</a>
+        </div>`;
+      })
+      .join("");
+  }
+
+  // ================= نقل حسابات الدورة الصيفية إلى الفصل الأول =================
+  // نفس الاسم والجوال والهوية والرقم السري، بدون حلقات ولا مسارات ولا إنجاز، ولا يتغير شيء في الصيف
+  function pendingSummerAccounts() {
+    if (!programs) return { students: [], teacher: [], supervisor: [] };
+    const s = programs[SUMMER];
+    const t = programs[TERM];
+    const copied = (list, x) =>
+      list.some((y) => y.sourceId === x.id || y.id === x.id + "_t1");
+    const sameStudent = (x) =>
+      t.students.some(
+        (y) =>
+          (x.idNumber && toLatinDigits(y.idNumber) === toLatinDigits(x.idNumber)) ||
+          (x.phone &&
+            normPhone(y.phone) === normPhone(x.phone) &&
+            normAr(y.name) === normAr(x.name)),
+      );
+    const sameUser = (list, x) =>
+      list.some((y) => normAr(y.name) === normAr(x.name) && y.pin === x.pin);
+    return {
+      students: s.students.filter(
+        (x) => !copied(t.students, x) && !sameStudent(x),
+      ),
+      teacher: s.users.teacher.filter(
+        (x) => !copied(t.users.teacher, x) && !sameUser(t.users.teacher, x),
+      ),
+      supervisor: s.users.supervisor.filter(
+        (x) =>
+          !copied(t.users.supervisor, x) && !sameUser(t.users.supervisor, x),
+      ),
+    };
+  }
+
+  function renderAccountsTransfer() {
+    const card = document.getElementById("accounts-transfer-card");
+    if (!card) return;
+    const show = isTerm() && currentUser && currentUser.role === "admin";
+    card.style.display = show ? "block" : "none";
+    if (!show) return;
+    const p = pendingSummerAccounts();
+    const total = p.students.length + p.teacher.length + p.supervisor.length;
+    document.getElementById("accounts-transfer-info").innerHTML = total
+      ? `لم يُنقل بعد: <strong>${p.students.length}</strong> طالب، <strong>${p.teacher.length}</strong> معلم، <strong>${p.supervisor.length}</strong> مشرف.`
+      : "✅ كل حسابات الدورة الصيفية موجودة في الفصل الأول.";
+    document.getElementById("accounts-transfer-btn").disabled = total === 0;
+  }
+
+  const transferBtn = document.getElementById("accounts-transfer-btn");
+  if (transferBtn) {
+    transferBtn.addEventListener("click", async () => {
+      if (!isTerm() || !currentUser || currentUser.role !== "admin") return;
+      const p = pendingSummerAccounts();
+      const total = p.students.length + p.teacher.length + p.supervisor.length;
+      if (total === 0) return;
+      if (typeof dbFirestore === "undefined" || !navigator.onLine)
+        return alert("نقل الحسابات يحتاج اتصالاً بالإنترنت.");
+      if (
+        !confirm(
+          `سيتم إنشاء ${p.students.length} طالب و ${p.teacher.length} معلم و ${p.supervisor.length} مشرف في الدورة الفصل الأول، بنفس الأسماء وأرقام الجوال والهوية والأرقام السرية.\nبدون حلقات ولا مسارات ولا إنجاز، ولن يتغير أي شيء في الدورة الصيفية.\nمتابعة؟`,
+        )
+      )
+        return;
+      const fresh = {
+        progress: { mem: [], cons: [], rev: [] },
+        manualProgress: { mem: "", cons: "", rev: "" },
+        detailedProgress: { mem: [], cons: [], rev: [] },
+        tasksTiming: { mem: {}, cons: {}, rev: {} },
+      };
+      const docs = [
+        ...p.students.map((x) => [
+          "students",
+          {
+            id: x.id + "_t1",
+            name: x.name || "",
+            idNumber: x.idNumber || "",
+            phone: x.phone || "",
+            pin: x.pin || "1234",
+            level: x.level || "غير محدد",
+            trackId: "",
+            circleId: "",
+            ...JSON.parse(JSON.stringify(fresh)),
+            programId: TERM,
+            sourceId: x.id,
+          },
+        ]),
+        ...["teacher", "supervisor"].flatMap((role) =>
+          p[role].map((x) => [
+            "users",
+            {
+              id: x.id + "_t1",
+              name: x.name || "",
+              phone: x.phone || "",
+              pin: x.pin || "",
+              role,
+              ...(role === "teacher" ? { circleId: "" } : {}),
+              programId: TERM,
+              sourceId: x.id,
+            },
+          ]),
+        ),
+      ];
+      transferBtn.disabled = true;
+      transferBtn.textContent = "جاري النقل...";
+      let saved = 0;
+      let failed = false;
+      // على دفعات، ولا يُضاف للنظام إلا ما حُفظ فعلياً
+      for (let i = 0; i < docs.length; i += 400) {
+        const chunk = docs.slice(i, i + 400);
+        try {
+          const batch = dbFirestore.batch();
+          chunk.forEach(([col, d]) =>
+            batch.set(dbFirestore.collection(col).doc(d.id), d),
+          );
+          await batch.commit();
+          chunk.forEach(([col, d]) => {
+            if (col === "students") programs[TERM].students.push(d);
+            else programs[TERM].users[d.role].push(d);
+          });
+          saved += chunk.length;
+        } catch (e) {
+          console.error("فشل نقل دفعة من الحسابات:", e);
+          failed = true;
+          break;
+        }
+      }
+      try {
+        saveLocalDB();
+      } catch (e) {}
+      transferBtn.textContent = "نقل الحسابات إلى الفصل الأول";
+      refreshAllViews();
+      if (saved > 0) addLog(`نقل ${saved} حساب من الدورة الصيفية إلى الفصل الأول`, "عام");
+      alert(
+        failed
+          ? `⚠️ تم نقل ${saved} حساب من أصل ${docs.length}، وحدث خطأ في الاتصال. أعد الضغط على الزر لإكمال الباقي.`
+          : `✅ تم نقل ${saved} حساب إلى الدورة الفصل الأول.\nالآن حدد لكل طالب مساره وحلقته.`,
+      );
     });
   }
 
