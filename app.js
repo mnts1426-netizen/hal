@@ -1291,8 +1291,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!trackingDate.value || trackingDate.value > todayLocal)
         trackingDate.value = todayLocal;
     }
-    // تسجيل الفصل يكون بإدخال رقم الحديث يدوياً
+    // تسجيل الفصل بأرقام الأحاديث فقط، وزر التبديل (شريط/دقيق) للصيف
     isGlobalManualMode = isTerm();
+    const toggleBtn = document.getElementById("global-toggle-btn");
+    if (toggleBtn) toggleBtn.style.display = isTerm() ? "none" : "";
   }
 
   function doLogin(user, isAutoSession = false) {
@@ -3587,9 +3589,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const pastLimit = isTerm() ? termDue : currentProgramDay - 1;
       const currentIdx = isTerm() ? termDue + 1 : currentProgramDay;
 
+      // الفصل: التسجيل بأرقام الأحاديث فقط، فلا يُبنى شريط الأيام ولا شبكة الصيف
+      const summerDays = isTerm() ? 0 : totalTrackDays;
+      const summerHadiths = isTerm() ? 0 : totalHadiths;
       let timelineHTML =
         '<div class="timeline-container"><div class="timeline-scroll">';
-      for (let i = 1; i <= totalTrackDays; i++) {
+      for (let i = 1; i <= summerDays; i++) {
         const memText = getTaskText(student.trackId, "mem", i);
         const consText = getTaskText(student.trackId, "cons", i);
         const revText = getTaskText(student.trackId, "rev", i);
@@ -3629,7 +3634,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let dropdownHTML = `<details class="dropdown-details"><summary>🔽 عرض تفصيل الأحاديث (تحديد / إلغاء الأحاديث بدقة)</summary><div class="dropdown-content">`;
       let memGrid = `<div class="hadith-grid-container"><h5>📖 أحاديث الحفظ:</h5><div class="hadith-grid">`;
-      for (let h = 1; h <= totalHadiths; h++) {
+      for (let h = 1; h <= summerHadiths; h++) {
         let checked = student.detailedProgress?.mem?.includes(h)
           ? "checked"
           : "";
@@ -3639,7 +3644,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       memGrid += `</div></div>`;
       let consGrid = `<div class="hadith-grid-container"><h5>🔄 أحاديث التثبيت:</h5><div class="hadith-grid">`;
-      for (let h = 1; h <= totalHadiths; h++) {
+      for (let h = 1; h <= summerHadiths; h++) {
         let checked = student.detailedProgress?.cons?.includes(h)
           ? "checked"
           : "";
@@ -3649,7 +3654,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       consGrid += `</div></div>`;
       let revGrid = `<div class="hadith-grid-container"><h5>🔁 أحاديث المراجعة:</h5><div class="hadith-grid">`;
-      for (let h = 1; h <= totalHadiths; h++) {
+      for (let h = 1; h <= summerHadiths; h++) {
         let checked = student.detailedProgress?.rev?.includes(h)
           ? "checked"
           : "";
@@ -3659,8 +3664,30 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       revGrid += `</div></div>`;
       dropdownHTML += memGrid + consGrid + revGrid + `</div></details>`;
-      // الفصل: الخطط كبيرة (حتى 1684 حديثاً)، والتسجيل برقم الحديث يكفي
-      if (isTerm()) dropdownHTML = "";
+
+      // الفصل: أرقام أحاديث مسار الطالب، والضغط على رقم يحدده مع كل ما قبله
+      const TERM_TYPES = [
+        ["mem", "📖 الحفظ", "📖 أحاديث الحفظ"],
+        ["cons", "🔄 التثبيت", "🔄 أحاديث التثبيت"],
+        ["rev", "🔁 المراجعة", "🔁 أحاديث المراجعة"],
+      ];
+      const termRange = isTerm() ? termPlanRange(student.trackId) : null;
+      const termSel = {};
+      const reachedLabel = (k) =>
+        termSel[k] ? `وصل إلى ح ${termSel[k]}` : "لم يبدأ";
+      let termHadithHTML = "";
+      if (isTerm()) {
+        if (!termRange.last)
+          termHadithHTML = `<p style="color:var(--danger-btn); font-weight:bold; font-size:0.85rem; margin:0;">حدد مسار الطالب أولاً لتظهر أرقام الأحاديث.</p>`;
+        else {
+          TERM_TYPES.forEach(([k]) => {
+            const r = reachedHadith(student, k);
+            termSel[k] = r >= termRange.first ? Math.min(r, termRange.last) : 0;
+          });
+          termHadithHTML = `<div style="display:flex; flex-wrap:wrap; gap:6px 18px; font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-bottom:6px;">${TERM_TYPES.map(([k, label]) => `<span>${label}: <span data-reached="${k}">${reachedLabel(k)}</span></span>`).join("")}</div>
+            <details class="dropdown-details term-hadith-details"><summary>🔽 أرقام الأحاديث (ح ${termRange.first} إلى ${termRange.last}): اضغط على رقم الحديث لتحديده مع ما قبله</summary><div class="dropdown-content"></div></details>`;
+        }
+      }
 
       let manualInputHTML = `
         <div class="manual-input-grid">
@@ -3699,12 +3726,47 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
             ${sessionTimeHtml}
           </div>
-          <div style="display: ${isGlobalManualMode ? "none" : "block"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الخطة الزمنية (متابعة بالأيام):</p>${timelineHTML}</div>
-          <div style="display: ${isGlobalManualMode ? "block" : "none"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الإدخال اليدوي الدقيق (متابعة بالأحاديث):</p>${manualInputHTML}${dropdownHTML}</div>
+          ${
+            isTerm()
+              ? `<div style="margin-bottom:0.5rem;"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">التسميع (بأرقام الأحاديث):</p>${termHadithHTML}</div>`
+              : `<div style="display: ${isGlobalManualMode ? "none" : "block"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الخطة الزمنية (متابعة بالأيام):</p>${timelineHTML}</div>
+          <div style="display: ${isGlobalManualMode ? "block" : "none"};"><p style="font-weight:800; margin-bottom: 0.4rem; color: var(--gold-text); font-size:0.85rem;">الإدخال اليدوي الدقيق (متابعة بالأحاديث):</p>${manualInputHTML}${dropdownHTML}</div>`
+          }
           <div style="margin-bottom: 1rem; margin-top: 0.5rem;"><label style="font-weight:700; display:block; font-size:0.8rem; margin-bottom:3px;">ملاحظات المعلم:</label><input type="text" name="notes" class="modern-input" placeholder="مثال: الطالب متميز اليوم..." value="${record && record.notes ? record.notes : ""}" ${disableStr}></div>
           ${isEditable ? `<button type="submit" class="btn-submit" style="width:auto; padding: 0.5rem 1.5rem;">💾 حفظ إنجاز الطالب</button>` : `<p style="color:var(--danger-btn); font-weight:bold; margin:0; font-size:0.85rem;">انتهت فترة التعديل (24 ساعة).</p>`}
         </form>
       `;
+
+      if (isTerm() && termRange && termRange.last) {
+        const det = card.querySelector(".term-hadith-details");
+        const box = det.querySelector(".dropdown-content");
+        det.addEventListener("toggle", () => {
+          if (!det.open || box.dataset.built) return;
+          box.dataset.built = "1";
+          box.innerHTML = TERM_TYPES.map(([k, , title]) => {
+            let cells = "";
+            for (let h = termRange.first; h <= termRange.last; h++)
+              cells += `<label class="h-item"><input type="checkbox" data-k="${k}" value="${h}" ${h <= termSel[k] ? "checked" : ""} ${disableStr}> ${h}</label>`;
+            return `<div class="hadith-grid-container"><h5>${title}:</h5><div class="hadith-grid">${cells}</div></div>`;
+          }).join("");
+        });
+        // تحديد رقم = هو وكل ما قبله، وإلغاء رقم = يُلغى هو وما بعده
+        box.addEventListener("change", (ev) => {
+          const k = ev.target.dataset && ev.target.dataset.k;
+          if (!k) return;
+          const h = parseInt(ev.target.value);
+          termSel[k] = ev.target.checked
+            ? h
+            : h - 1 >= termRange.first
+              ? h - 1
+              : 0;
+          box
+            .querySelectorAll(`input[data-k="${k}"]`)
+            .forEach((c) => (c.checked = parseInt(c.value) <= termSel[k]));
+          const lab = card.querySelector(`[data-reached="${k}"]`);
+          if (lab) lab.textContent = reachedLabel(k);
+        });
+      }
 
       if (isEditable) {
         setupDetailedSync(card, student, "mem");
@@ -3736,90 +3798,111 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             const stamp = isTerm() ? recitedAt : sTime;
 
-            const oldMemDays = student.progress.mem || [];
-            const oldConsDays = student.progress.cons || [];
-            const oldRevDays = student.progress.rev || [];
-            const oldDetMem = student.detailedProgress.mem || [];
-            const oldDetCons = student.detailedProgress.cons || [];
-            const oldDetRev = student.detailedProgress.rev || [];
+            if (isTerm()) {
+              // الفصل: ما حُدد من أرقام الأحاديث، وأيام الخطة التي اكتمل مقررها
+              if (termRange && termRange.last)
+                TERM_TYPES.forEach(([k]) => {
+                  const sel = termSel[k] || 0;
+                  const days = [];
+                  for (let d = 1; d <= totalTrackDays; d++) {
+                    const target = extractMaxNum(
+                      getTaskText(student.trackId, k, d),
+                    );
+                    if (target > 0 && target <= sel) days.push(d);
+                  }
+                  days
+                    .filter((d) => !(student.progress[k] || []).includes(d))
+                    .forEach((d) => (student.tasksTiming[k]["day_" + d] = stamp));
+                  student.progress[k] = days;
+                  student.manualProgress[k] = sel ? String(sel) : "";
+                  student.detailedProgress[k] = [];
+                });
+            } else {
+              const oldMemDays = student.progress.mem || [];
+              const oldConsDays = student.progress.cons || [];
+              const oldRevDays = student.progress.rev || [];
+              const oldDetMem = student.detailedProgress.mem || [];
+              const oldDetCons = student.detailedProgress.cons || [];
+              const oldDetRev = student.detailedProgress.rev || [];
 
-            let newMem = [],
-              newCons = [],
-              newRev = [];
-            for (let i = 1; i <= totalTrackDays; i++) {
-              if (
-                e.target.elements[`chk_mem_${i}`] &&
-                e.target.elements[`chk_mem_${i}`].checked
-              )
-                newMem.push(i);
-              if (
-                e.target.elements[`chk_cons_${i}`] &&
-                e.target.elements[`chk_cons_${i}`].checked
-              )
-                newCons.push(i);
-              if (
-                e.target.elements[`chk_rev_${i}`] &&
-                e.target.elements[`chk_rev_${i}`].checked
-              )
-                newRev.push(i);
+              let newMem = [],
+                newCons = [],
+                newRev = [];
+              for (let i = 1; i <= totalTrackDays; i++) {
+                if (
+                  e.target.elements[`chk_mem_${i}`] &&
+                  e.target.elements[`chk_mem_${i}`].checked
+                )
+                  newMem.push(i);
+                if (
+                  e.target.elements[`chk_cons_${i}`] &&
+                  e.target.elements[`chk_cons_${i}`].checked
+                )
+                  newCons.push(i);
+                if (
+                  e.target.elements[`chk_rev_${i}`] &&
+                  e.target.elements[`chk_rev_${i}`].checked
+                )
+                  newRev.push(i);
+              }
+
+              let detMem = [],
+                detCons = [],
+                detRev = [];
+              card
+                .querySelectorAll(`input[name="det_mem_${student.id}"]:checked`)
+                .forEach((c) => detMem.push(parseInt(c.value)));
+              card
+                .querySelectorAll(`input[name="det_cons_${student.id}"]:checked`)
+                .forEach((c) => detCons.push(parseInt(c.value)));
+              card
+                .querySelectorAll(`input[name="det_rev_${student.id}"]:checked`)
+                .forEach((c) => detRev.push(parseInt(c.value)));
+
+              if (isTerm() || sTime !== "غير محدد") {
+                newMem
+                  .filter((x) => !oldMemDays.includes(x))
+                  .forEach((d) => (student.tasksTiming.mem["day_" + d] = stamp));
+                newCons
+                  .filter((x) => !oldConsDays.includes(x))
+                  .forEach((d) => (student.tasksTiming.cons["day_" + d] = stamp));
+                newRev
+                  .filter((x) => !oldRevDays.includes(x))
+                  .forEach((d) => (student.tasksTiming.rev["day_" + d] = stamp));
+
+                detMem
+                  .filter((x) => !oldDetMem.includes(x))
+                  .forEach(
+                    (h) => (student.tasksTiming.mem["hadith_" + h] = stamp),
+                  );
+                detCons
+                  .filter((x) => !oldDetCons.includes(x))
+                  .forEach(
+                    (h) => (student.tasksTiming.cons["hadith_" + h] = stamp),
+                  );
+                detRev
+                  .filter((x) => !oldDetRev.includes(x))
+                  .forEach(
+                    (h) => (student.tasksTiming.rev["hadith_" + h] = stamp),
+                  );
+              }
+
+              student.progress.mem = newMem;
+              student.progress.cons = newCons;
+              student.progress.rev = newRev;
+              student.manualProgress.mem = e.target.elements["manual_mem"]
+                ? e.target.elements["manual_mem"].value
+                : "";
+              student.manualProgress.cons = e.target.elements["manual_cons"]
+                ? e.target.elements["manual_cons"].value
+                : "";
+              student.manualProgress.rev = e.target.elements["manual_rev"]
+                ? e.target.elements["manual_rev"].value
+                : "";
+              student.detailedProgress.mem = detMem;
+              student.detailedProgress.cons = detCons;
+              student.detailedProgress.rev = detRev;
             }
-
-            let detMem = [],
-              detCons = [],
-              detRev = [];
-            card
-              .querySelectorAll(`input[name="det_mem_${student.id}"]:checked`)
-              .forEach((c) => detMem.push(parseInt(c.value)));
-            card
-              .querySelectorAll(`input[name="det_cons_${student.id}"]:checked`)
-              .forEach((c) => detCons.push(parseInt(c.value)));
-            card
-              .querySelectorAll(`input[name="det_rev_${student.id}"]:checked`)
-              .forEach((c) => detRev.push(parseInt(c.value)));
-
-            if (isTerm() || sTime !== "غير محدد") {
-              newMem
-                .filter((x) => !oldMemDays.includes(x))
-                .forEach((d) => (student.tasksTiming.mem["day_" + d] = stamp));
-              newCons
-                .filter((x) => !oldConsDays.includes(x))
-                .forEach((d) => (student.tasksTiming.cons["day_" + d] = stamp));
-              newRev
-                .filter((x) => !oldRevDays.includes(x))
-                .forEach((d) => (student.tasksTiming.rev["day_" + d] = stamp));
-
-              detMem
-                .filter((x) => !oldDetMem.includes(x))
-                .forEach(
-                  (h) => (student.tasksTiming.mem["hadith_" + h] = stamp),
-                );
-              detCons
-                .filter((x) => !oldDetCons.includes(x))
-                .forEach(
-                  (h) => (student.tasksTiming.cons["hadith_" + h] = stamp),
-                );
-              detRev
-                .filter((x) => !oldDetRev.includes(x))
-                .forEach(
-                  (h) => (student.tasksTiming.rev["hadith_" + h] = stamp),
-                );
-            }
-
-            student.progress.mem = newMem;
-            student.progress.cons = newCons;
-            student.progress.rev = newRev;
-            student.manualProgress.mem = e.target.elements["manual_mem"]
-              ? e.target.elements["manual_mem"].value
-              : "";
-            student.manualProgress.cons = e.target.elements["manual_cons"]
-              ? e.target.elements["manual_cons"].value
-              : "";
-            student.manualProgress.rev = e.target.elements["manual_rev"]
-              ? e.target.elements["manual_rev"].value
-              : "";
-            student.detailedProgress.mem = detMem;
-            student.detailedProgress.cons = detCons;
-            student.detailedProgress.rev = detRev;
 
             syncToFirestore("students", student.id, student);
 
