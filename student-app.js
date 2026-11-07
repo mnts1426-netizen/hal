@@ -905,10 +905,18 @@ document.addEventListener("DOMContentLoaded", () => {
               (b.tracks || []).includes(currentStudent.trackId),
             )
           : [];
+        // يفتح الكتاب على صفحة حفظ الجلسة الحالية (أو آخر جلسة فيها حفظ)
+        let startPage = 0;
+        for (let d = currentDay; d >= 1 && !startPage; d--) {
+          const m = /\(ص\s*(\d+)-/.exec(
+            toLatinDigits(getTaskText(currentStudent.trackId, "mem", d) || ""),
+          );
+          if (m) startPage = +m[1];
+        }
         booksBox.innerHTML = books
           .map(
             (b) =>
-              `<a href="${b.file}" target="_blank" rel="noopener" class="btn-action" style="display:flex; justify-content:center; gap:8px; align-items:center; width:100%; margin-top:10px; padding:10px; font-size:0.9rem; text-decoration:none;">📚 ${b.name}</a>`,
+              `<button type="button" class="btn-action" style="display:flex; justify-content:center; gap:8px; align-items:center; width:100%; margin-top:10px; padding:10px; font-size:0.9rem;" onclick="openBookViewer('${b.id}', ${startPage || 0})">📚 ${b.name}</button>`,
           )
           .join("");
         booksBox.style.display = books.length ? "block" : "none";

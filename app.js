@@ -3885,7 +3885,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<div class="content-card" style="margin:0;">
           <h3 class="content-card-title">📖 ${esc(b.name)}</h3>
           <p style="font-size:0.85rem; color:var(--text-gray); line-height:1.7; margin-bottom:1rem;">${tracks.length ? `المسارات: ${tracks.map(esc).join("، ")}` : "كتاب للاطلاع"}</p>
-          <a href="${esc(b.file)}" target="_blank" rel="noopener" class="btn-submit" style="display:block; text-align:center; text-decoration:none; margin:0;">فتح الكتاب</a>
+          <button type="button" class="btn-submit" style="margin:0;" onclick="openBookViewer('${esc(b.id)}')">فتح الكتاب</button>
         </div>`;
       })
       .join("");
