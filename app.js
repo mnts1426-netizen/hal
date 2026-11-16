@@ -188,6 +188,41 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${day} ${hijriDayMonth(d)} - ${time}`;
   }
 
+  // أوقات التسميع في سجل اليوم: كل تسميع له وقته المستقل (والسجلات القديمة فيها وقت واحد)
+  function recitationTimes(record) {
+    if (!record) return [];
+    if (Array.isArray(record.times) && record.times.length)
+      return record.times.filter((t) => t && t.at);
+    return record.recitedAt
+      ? [{ at: record.recitedAt, by: record.recordedBy || "" }]
+      : [];
+  }
+
+  function formatTimeOnly(ts) {
+    return new Date(ts).toLocaleTimeString("ar-SA-u-nu-latn", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function formatRecitationTimes(record) {
+    const list = recitationTimes(record);
+    if (!list.length) return "";
+    return (
+      formatRecitedAt(list[0].at) +
+      list
+        .slice(1)
+        .map((t) => "، " + formatTimeOnly(t.at))
+        .join("")
+    );
+  }
+
+  function toTimeInputValue(ts) {
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   function toLocalInputValue(ts) {
     const d = new Date(ts);
     const p = (n) => String(n).padStart(2, "0");
@@ -210,7 +245,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // المواكبة في الفصل على الحفظ فقط: كم جلسة انتهت ولم يصل الطالب لمقرر حفظها
   function termMemStatus(student) {
     const track = window.db.tracks.find((t) => t.id === student.trackId);
-    if (!track || !track.startDate) return null;
+    // المسار بلا خطة، أو المسار بدون مواكبة (الأربعون النووية): لا تظهر علامة مواكب / متأخر
+    if (!track || !track.startDate || track.noPlan || track.noStatus)
+      return null;
     const due = termDueCount(track);
     const reached = reachedHadith(student, "mem");
     let behind = 0;
@@ -234,6 +271,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // نسبة الحفظ من الخطة كاملة
   // أول وآخر حديث في خطة الحفظ (بعض الخطط لا تبدأ من الحديث 1)
   function termPlanRange(trackId) {
+    // مسار بلا خطة: أرقامه محددة في المسار نفسه
+    const nt = window.db.tracks.find((t) => t.id === trackId);
+    if (nt && nt.noPlan)
+      return { first: nt.firstHadith || 1, last: nt.totalHadiths || 0 };
     let first = 0;
     let last = 0;
     (window.db.scheduleData[trackId] || []).forEach((d) => {
@@ -285,6 +326,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // عدد الصفحات المنجزة من كتاب المسار: عند نهاية الجلسة من الخطة، وداخلها من فهرس الكتاب
   function termPagesDone(student) {
+    const nt = window.db.tracks.find((t) => t.id === student.trackId);
+    if (nt && nt.noPlan) return noPlanPagesDone(student, nt);
     const sessions = termPlanSessions(student.trackId);
     if (sessions.length === 0) return null;
     const n = reachedHadith(student, "mem");
@@ -311,6 +354,29 @@ document.addEventListener("DOMContentLoaded", () => {
           Math.floor(((n - s.fh + 1) / (s.th - s.fh + 1)) * (s.tp - s.fp));
       end = Math.min(Math.max(end, s.fp), s.tp);
     }
+    return Math.max(0, end - firstPage + 1);
+  }
+
+  // الصفحات المنجزة لمسار بلا خطة: من فهرس الكتاب (صفحة أول حديث إلى صفحة آخر حديث وصل إليه)
+  function noPlanPagesDone(student, track) {
+    const book = (window.TERM_BOOKS || []).find((b) =>
+      (b.tracks || []).includes(track.id),
+    );
+    const sp = book && book.startPages;
+    const first = track.firstHadith || 1;
+    const last = track.totalHadiths || 0;
+    if (!sp || !last) return null;
+    const firstPage = track.firstPage || sp[first - 1];
+    const n = Math.min(reachedHadith(student, "mem"), last);
+    if (n < first) return 0;
+    let end;
+    if (n === last && track.lastPage) end = track.lastPage;
+    else {
+      const a = sp[n - 1];
+      const b = sp[n];
+      end = Math.max(a, (b || a) - 1);
+    }
+    if (track.lastPage) end = Math.min(end, track.lastPage);
     return Math.max(0, end - firstPage + 1);
   }
 
@@ -647,6 +713,17 @@ document.addEventListener("DOMContentLoaded", () => {
         totalHadiths: p.totalHadiths,
         startDate: p.startDate,
         programId: TERM,
+        // مسار بلا خطة (التسجيل برقم الحديث فقط)، ومسار له تاريخ بداية خاص وبدون مواكبة
+        ...(p.noPlan
+          ? {
+              noPlan: true,
+              firstHadith: p.firstHadith,
+              firstPage: p.firstPage,
+              lastPage: p.lastPage,
+            }
+          : {}),
+        ...(p.ownStart ? { ownStart: true } : {}),
+        ...(p.noStatus ? { noStatus: true } : {}),
       });
       sched[p.id] = p.schedule.map((d) => ({ ...d }));
     });
@@ -1691,20 +1768,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (avgProgress > 100) avgProgress = 100;
 
     let totalMemorizedHadiths = 0;
-    let behindCard = "";
+    let pagesCard = "";
     if (isTerm()) {
-      // الفصل الأول: الإنجاز والمواكبة على الحفظ فقط
-      let behindCount = 0;
+      // الفصل الأول: الإنجاز على الحفظ فقط، ومجموع صفحات الحفظ
       let pctSum = 0;
+      let totalPages = 0;
       students.forEach((s) => {
         totalMemorizedHadiths += termMemCount(s);
         pctSum += termMemPercent(s);
-        const st = termMemStatus(s);
-        if (st && st.behind > 0) behindCount++;
+        totalPages += termPagesDone(s) || 0;
       });
       avgProgress =
         students.length > 0 ? Math.round(pctSum / students.length) : 0;
-      behindCard = `<div class="stat-card" style="border-bottom-color:#991b1b;"><h3>متأخرون في الحفظ عن الخطة</h3><p class="stat-value" style="color:#991b1b;">${behindCount}</p></div>`;
+      pagesCard = `<div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي صفحات الحفظ</h3><p class="stat-value" style="color: var(--primary-blue);">${totalPages}</p></div>`;
     } else {
       totalMemorizedHadiths = students.reduce((acc, s) => {
         let highestMem = parseInt(s.manualProgress?.mem) || 0;
@@ -1716,9 +1792,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (isTeacher) {
-      dashGrid.innerHTML = `<div class="stat-card"><h3>${teacherCircles.length > 1 ? `طلاب حلقاتي (${teacherCircles.length} حلقات)` : "طلاب حلقتي"}</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div>${behindCard}`;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>${teacherCircles.length > 1 ? `طلاب حلقاتي (${teacherCircles.length} حلقات)` : "طلاب حلقتي"}</h3><p class="stat-value">${students.length}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div>${pagesCard}`;
     } else {
-      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>${behindCard}`;
+      dashGrid.innerHTML = `<div class="stat-card"><h3>الطلاب المسجلين</h3><p class="stat-value">${students.length}</p></div><div class="stat-card"><h3>الحلقات المسجلة</h3><p class="stat-value">${circlesCount}</p></div><div class="stat-card gold"><h3>نسبة حضور الطلاب</h3><p class="stat-value">${attendanceRate}%</p></div><div class="stat-card gold"><h3>متوسط إنجاز المنهج</h3><p class="stat-value">${avgProgress}%</p></div><div class="stat-card gold" style="border-bottom-color: var(--primary-blue);"><h3>إجمالي التسميع (أحاديث)</h3><p class="stat-value" style="color: var(--primary-blue);">${totalMemorizedHadiths}</p></div>${pagesCard}<div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الابتدائية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الابتدائية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة المتوسطة</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "المتوسطة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الثانوية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الثانوية").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>المرحلة الجامعية</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "الجامعة").length}</p></div><div class="stat-card" style="border-bottom-color:#64748b;"><h3>أعلى من ذلك</h3><p class="stat-value" style="color:var(--text-dark); font-size:1.8rem;">${students.filter((s) => s.level === "أعلى من ذلك").length}</p></div>`;
     }
   }
 
@@ -1913,7 +1989,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!d) return alert("الرجاء اختيار التاريخ.");
       if (d.getDay() !== 5)
         return alert("⚠️ التاريخ المختار ليس يوم جمعة. اختر تاريخ أول جمعة في الدورة.");
-      const termTracks = window.db.tracks;
+      // المسار الذي له تاريخ بداية خاص (الأربعون النووية) لا يتغير تاريخه
+      const termTracks = window.db.tracks.filter((t) => !t.ownStart);
       if (termTracks.length === 0)
         return alert("أضف مسارات الفصل أولاً، ثم حدد تاريخ البداية.");
       termTracks.forEach((t) => (t.startDate = value));
@@ -3360,10 +3437,9 @@ document.addEventListener("DOMContentLoaded", () => {
           ? ` | وقت: ${record.sessionTime}`
           : "";
       if (isTerm() && record)
-        timeStr =
-          (record.recitedAt
-            ? ` | وقت التسميع: ${formatRecitedAt(record.recitedAt)}`
-            : "") + (record.isReview ? " | 🔁 مراجعة" : "");
+        timeStr = recitationTimes(record).length
+          ? ` | وقت التسميع: ${formatRecitationTimes(record)}`
+          : "";
       const tasksCompleted = record
         ? `أيام المنهج: ${student.progress?.mem?.length || 0}/${student.progress?.cons?.length || 0}/${student.progress?.rev?.length || 0}${manualStr}${timeStr}`
         : "لا يوجد إنجاز جديد";
@@ -3500,9 +3576,10 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  function renderDailyTracking(searchTerm) {
+  // onlyStudentId: تحديث بطاقة هذا الطالب فقط (بعد حفظه) وبقية البطاقات كما هي
+  function renderDailyTracking(searchTerm, onlyStudentId) {
     if (!trackingContainer) return;
-    trackingContainer.innerHTML = "";
+    if (!onlyStudentId) trackingContainer.innerHTML = "";
     let filteredStudents = window.db.students;
     if (currentUser.role === "teacher") {
       const ids = myCircleIds();
@@ -3528,9 +3605,12 @@ document.addEventListener("DOMContentLoaded", () => {
         s.name.toLowerCase().includes(searchTerm),
       );
 
+    if (onlyStudentId)
+      filteredStudents = filteredStudents.filter((s) => s.id === onlyStudentId);
     if (filteredStudents.length === 0) {
-      trackingContainer.innerHTML =
-        '<p style="text-align:center; color:var(--text-gray);">لا توجد نتائج أو لا يوجد طلاب في هذه الحلقة.</p>';
+      if (!onlyStudentId)
+        trackingContainer.innerHTML =
+          '<p style="text-align:center; color:var(--text-gray);">لا توجد نتائج أو لا يوجد طلاب في هذه الحلقة.</p>';
       return;
     }
 
@@ -3673,6 +3753,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ];
       const termRange = isTerm() ? termPlanRange(student.trackId) : null;
       const termSel = {};
+      const termSel0 = {};
       const reachedLabel = (k) =>
         termSel[k] ? `وصل إلى ح ${termSel[k]}` : "لم يبدأ";
       let termHadithHTML = "";
@@ -3683,6 +3764,7 @@ document.addEventListener("DOMContentLoaded", () => {
           TERM_TYPES.forEach(([k]) => {
             const r = reachedHadith(student, k);
             termSel[k] = r >= termRange.first ? Math.min(r, termRange.last) : 0;
+            termSel0[k] = termSel[k];
           });
           termHadithHTML = `<div style="display:flex; flex-wrap:wrap; gap:6px 18px; font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-bottom:6px;">${TERM_TYPES.map(([k, label]) => `<span>${label}: <span data-reached="${k}">${reachedLabel(k)}</span></span>`).join("")}</div>
             <details class="dropdown-details term-hadith-details"><summary>🔽 أرقام الأحاديث (ح ${termRange.first} إلى ${termRange.last}): اضغط على رقم الحديث لتحديده مع ما قبله</summary><div class="dropdown-content"></div></details>`;
@@ -3697,15 +3779,20 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       `;
 
-      // الفصل: وقت التسميع يُسجَّل تلقائياً ويمكن تعديله، وعلامة المراجعة يوم السبت
-      const recDay = parseIsoDate(today);
-      const isSaturday = isTerm() && recDay && recDay.getDay() === 6;
+      // الفصل: وقت كل تسميع يُسجَّل تلقائياً عند الحفظ، وكل وقت يُعدَّل لحاله ولهذا الطالب فقط
+      const recTimes = isTerm() ? recitationTimes(record) : [];
+      const escTxt = (v) =>
+        String(v == null ? "" : v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
       const sessionTimeHtml = isTerm()
         ? `<div class="status-radios" style="align-items:center;"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
-              <input type="datetime-local" name="recited_at" class="modern-input" style="width:auto; padding:0.3rem 0.5rem; min-height:auto; font-size:0.85rem;" value="${record && record.recitedAt ? toLocalInputValue(record.recitedAt) : ""}" ${disableStr}>
-              <span style="font-size:0.75rem; color:var(--text-gray);">${record && record.recitedAt ? `سُجّل: ${formatRecitedAt(record.recitedAt)}${record.recordedBy ? ` (${record.recordedBy})` : ""} — يمكن تعديله` : "يُسجَّل تلقائياً عند الحفظ"}</span>
-            </div>
-            ${isSaturday ? `<label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; font-weight:800; color:#7c3aed; cursor:pointer; width:fit-content;"><input type="checkbox" name="is_review" style="width:18px; height:18px; accent-color:#7c3aed;" ${record && record.isReview ? "checked" : ""} ${disableStr}> 🔁 هذا التسميع مراجعة</label>` : ""}`
+              ${recTimes
+                .map(
+                  (t, i) =>
+                    `<span style="display:inline-flex; align-items:center; gap:4px;"><input type="time" name="rec_time_${i}" class="modern-input" style="width:auto; padding:0.3rem 0.5rem; min-height:auto; font-size:0.85rem;" value="${toTimeInputValue(t.at)}" ${disableStr}>${t.by ? `<span style="font-size:0.7rem; color:var(--text-gray);">(${escTxt(t.by)})</span>` : ""}</span>`,
+                )
+                .join("")}
+              <span style="font-size:0.75rem; color:var(--text-gray);">${recTimes.length ? "يُسجَّل وقت كل تسميع جديد تلقائياً عند الحفظ. لتعديل وقت: غيّره من خانته ثم احفظ (يتعدل لهذا الطالب فقط)" : "يُسجَّل الوقت تلقائياً عند الحفظ"}</span>
+            </div>`
         : `<div class="status-radios"><span style="font-size:0.85rem; font-weight:800; color:var(--primary-blue); margin-left:4px; line-height:2.2;">وقت التسميع:</span>
               <div class="status-radio"><input type="radio" id="time_fajr_${student.id}" name="session_time" value="فجر" ${record && record.sessionTime === "فجر" ? "checked" : ""} ${disableStr}><label for="time_fajr_${student.id}">بعد الفجر 🌅</label></div>
               <div class="status-radio"><input type="radio" id="time_asr_${student.id}" name="session_time" value="عصر" ${record && record.sessionTime === "عصر" ? "checked" : ""} ${disableStr}><label for="time_asr_${student.id}">بعد العصر 🌇</label></div>
@@ -3781,22 +3868,44 @@ document.addEventListener("DOMContentLoaded", () => {
             const sTime = sTimeEl ? sTimeEl.value : "غير محدد";
             const notes = e.target.elements["notes"].value;
 
-            // الفصل: الوقت المكتوب، أو الوقت السابق، أو وقت الحفظ الآن (على تاريخ التسجيل)
-            let recitedAt = null;
+            // الفصل: الأوقات السابقة كما هي (إلا ما عُدّل منها في خانته)، ووقت جديد تلقائي لكل تسميع جديد
+            let recTimesNew = [];
+            let newTimeAt = null;
             if (isTerm()) {
-              const v = e.target.elements["recited_at"].value;
-              const parsed = v ? new Date(v).getTime() : NaN;
-              if (!isNaN(parsed)) recitedAt = parsed;
-              else if (record && record.recitedAt) recitedAt = record.recitedAt;
-              else {
-                const now = new Date();
-                const d = parseIsoDate(today);
-                d.setHours(now.getHours(), now.getMinutes(), 0, 0);
-                recitedAt =
-                  today === toIsoDate(now) ? now.getTime() : d.getTime();
+              const edited = [];
+              recTimesNew = recitationTimes(record).map((t, i) => {
+                const el = e.target.elements["rec_time_" + i];
+                const v = el ? el.value : "";
+                if (!/^\d{1,2}:\d{2}$/.test(v) || v === toTimeInputValue(t.at))
+                  return { at: t.at, by: t.by || "" };
+                const [hh, mm] = v.split(":").map(Number);
+                const d = new Date(t.at);
+                d.setHours(hh, mm, 0, 0);
+                edited.push([t.at, d.getTime()]);
+                return { at: d.getTime(), by: t.by || "" };
+              });
+              // وقت مُعدَّل يُعدَّل معه ما سُجّل به من أيام الخطة لهذا الطالب فقط
+              edited.forEach(([oldAt, newAt]) =>
+                TERM_TYPES.forEach(([k]) => {
+                  const tt = student.tasksTiming[k] || {};
+                  Object.keys(tt).forEach((key) => {
+                    if (tt[key] === oldAt) tt[key] = newAt;
+                  });
+                }),
+              );
+              const progressChanged =
+                !!(termRange && termRange.last) &&
+                TERM_TYPES.some(([k]) => (termSel[k] || 0) !== (termSel0[k] || 0));
+              const attended = att === "present" || att === "late";
+              if (attended && (recTimesNew.length === 0 || progressChanged)) {
+                newTimeAt = Date.now();
+                recTimesNew.push({ at: newTimeAt, by: currentUser.name });
               }
             }
-            const stamp = isTerm() ? recitedAt : sTime;
+            const lastTimeAt = recTimesNew.length
+              ? recTimesNew[recTimesNew.length - 1].at
+              : null;
+            const stamp = isTerm() ? newTimeAt || lastTimeAt : sTime;
 
             if (isTerm()) {
               // الفصل: ما حُدد من أرقام الأحاديث، وأيام الخطة التي اكتمل مقررها
@@ -3915,11 +4024,8 @@ document.addEventListener("DOMContentLoaded", () => {
                   date: today,
                   attendance: att,
                   notes,
-                  recitedAt,
-                  isReview: !!(
-                    e.target.elements["is_review"] &&
-                    e.target.elements["is_review"].checked
-                  ),
+                  recitedAt: recTimesNew.length ? recTimesNew[0].at : null,
+                  times: recTimesNew,
                   recordedBy: currentUser.name,
                   programId: TERM,
                   timestamp: Date.now(),
@@ -3944,13 +4050,20 @@ document.addEventListener("DOMContentLoaded", () => {
             );
 
             saveLocalDB();
-            renderDailyTracking(searchInput.value.toLowerCase());
+            renderDailyTracking(searchInput.value.toLowerCase(), student.id);
             updateDashboardStats();
             generateReport();
             alert("تم حفظ إنجاز الطالب بنجاح!");
           });
       }
-      trackingContainer.appendChild(card);
+      if (onlyStudentId) {
+        const oldForm = trackingContainer.querySelector(
+          `.daily-track-form[data-student-id="${student.id}"]`,
+        );
+        const oldCard = oldForm && oldForm.closest(".tracking-card");
+        if (oldCard) oldCard.replaceWith(card);
+        else trackingContainer.appendChild(card);
+      } else trackingContainer.appendChild(card);
     });
   }
 

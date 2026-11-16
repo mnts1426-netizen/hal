@@ -305,6 +305,15 @@ document.addEventListener("DOMContentLoaded", () => {
         totalDays: plan.totalDays,
         startDate: plan.startDate,
         programId: TERM,
+        // مسار بلا خطة (التسجيل برقم الحديث فقط)، ومسار بدون مواكبة (الأربعون النووية)
+        ...(plan.noPlan
+          ? {
+              noPlan: true,
+              firstHadith: plan.firstHadith,
+              totalHadiths: plan.totalHadiths,
+            }
+          : {}),
+        ...(plan.noStatus ? { noStatus: true } : {}),
       });
       scheduleData[plan.id] = plan.schedule;
     }
@@ -461,6 +470,31 @@ document.addEventListener("DOMContentLoaded", () => {
       minute: "2-digit",
     });
     return `${day} ${hijriDayMonth(d)} - ${time}`;
+  }
+
+  // أوقات التسميع في سجل اليوم: كل تسميع له وقته المستقل (والسجلات القديمة فيها وقت واحد)
+  function formatRecitationTimes(record) {
+    const list =
+      Array.isArray(record.times) && record.times.length
+        ? record.times.filter((t) => t && t.at)
+        : record.recitedAt
+          ? [{ at: record.recitedAt }]
+          : [];
+    if (!list.length) return "";
+    return (
+      formatRecitedAt(list[0].at) +
+      list
+        .slice(1)
+        .map(
+          (t) =>
+            "، " +
+            new Date(t.at).toLocaleTimeString("ar-SA-u-nu-latn", {
+              hour: "numeric",
+              minute: "2-digit",
+            }),
+        )
+        .join("")
+    );
   }
 
   function sessionsText(n) {
@@ -752,6 +786,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // من أول حديث في الخطة إلى آخره (بعض الخطط لا تبدأ من الحديث 1)
         let first = 0;
         let last = 0;
+        if (trackInfo && trackInfo.noPlan) {
+          first = trackInfo.firstHadith || 1;
+          last = trackInfo.totalHadiths || 0;
+        }
         (scheduleData[currentStudent.trackId] || []).forEach((d) => {
           const m = /ح\s*(\d+)\s*إلى\s*(\d+)/.exec(toLatinDigits(d.mem || ""));
           if (!m) return;
@@ -770,15 +808,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (term) {
         let statusHtml = "";
-        if (trackInfo && trackInfo.startDate) {
+        const noPlan = !!(trackInfo && trackInfo.noPlan);
+        if (
+          trackInfo &&
+          trackInfo.startDate &&
+          !trackInfo.noPlan &&
+          !trackInfo.noStatus
+        ) {
           const behind = termMemBehind(currentStudent, trackInfo);
           statusHtml =
             behind > 0
               ? `<br><span style="color:#991b1b; font-size:0.85rem;">⚠️ متأخر في الحفظ (${sessionsText(behind)})</span>`
               : `<br><span style="color:#166534; font-size:0.85rem;">🌟 مواكب للخطة في الحفظ</span>`;
         }
-        document.getElementById("st-today-label").innerHTML =
-          termDayLabel(trackInfo, currentDay) + statusHtml;
+        document.getElementById("st-today-label").innerHTML = noPlan
+          ? `التسجيل بأرقام الأحاديث (ح ${trackInfo.firstHadith || 1} إلى ${trackInfo.totalHadiths || ""})`
+          : termDayLabel(trackInfo, currentDay) + statusHtml;
       } else
         document.getElementById("st-today-label").textContent =
           getDateLabel(currentDay);
@@ -807,14 +852,25 @@ document.addEventListener("DOMContentLoaded", () => {
         revTimeStr = doneStr("rev");
       }
 
+      // مسار بلا خطة: يظهر أين وصل الطالب في كل نوع بدل مقرر اليوم
+      const noPlanTask = (type) => {
+        const r = reachedHadith(currentStudent, type);
+        return r ? `وصل إلى ح ${r}` : "لم يبدأ";
+      };
+      const taskText = (type) =>
+        term && trackInfo && trackInfo.noPlan
+          ? noPlanTask(type)
+          : getTaskText(currentStudent.trackId, type, currentDay);
+      if (term && trackInfo && trackInfo.noPlan)
+        memTimeStr = consTimeStr = revTimeStr = "";
       document.getElementById("st-task-mem").innerHTML =
-        getTaskText(currentStudent.trackId, "mem", currentDay) +
+        taskText("mem") +
         `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${memTimeStr}</span>`;
       document.getElementById("st-task-cons").innerHTML =
-        getTaskText(currentStudent.trackId, "cons", currentDay) +
+        taskText("cons") +
         `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${consTimeStr}</span>`;
       document.getElementById("st-task-rev").innerHTML =
-        getTaskText(currentStudent.trackId, "rev", currentDay) +
+        taskText("rev") +
         `<span style="color:var(--primary-blue); font-size:0.75rem; font-weight:bold; margin-right:5px;">${revTimeStr}</span>`;
 
       const todayIso = term
@@ -841,9 +897,8 @@ document.addEventListener("DOMContentLoaded", () => {
           statusCard.style.borderTop = "4px solid #991b1b";
           statusDiv.style.color = "#991b1b";
         }
-        if (term && todayRecord.recitedAt)
-          text += ` (وقت التسميع: ${formatRecitedAt(todayRecord.recitedAt)})`;
-        if (term && todayRecord.isReview) text += " 🔁 مراجعة";
+        const timesStr = term ? formatRecitationTimes(todayRecord) : "";
+        if (timesStr) text += ` (وقت التسميع: ${timesStr})`;
         statusDiv.textContent = text;
       } else {
         statusCard.style.borderTop = "4px solid var(--text-gray)";
@@ -913,6 +968,18 @@ document.addEventListener("DOMContentLoaded", () => {
           );
           if (m) startPage = +m[1];
         }
+        // مسار بلا خطة: يفتح الكتاب على صفحة الحديث التالي لما وصل إليه
+        if (!startPage && trackInfo && trackInfo.noPlan && books[0]) {
+          const sp = books[0].startPages || [];
+          const next = Math.min(
+            Math.max(
+              reachedHadith(currentStudent, "mem") + 1,
+              trackInfo.firstHadith || 1,
+            ),
+            trackInfo.totalHadiths || 1,
+          );
+          startPage = sp[next - 1] || 0;
+        }
         booksBox.innerHTML = books
           .map(
             (b) =>
@@ -935,6 +1002,8 @@ document.addEventListener("DOMContentLoaded", () => {
             : "المسار غير محدد";
           const sched = scheduleData[currentStudent.trackId] || [];
           tbody.innerHTML = "";
+          if (term && trackInfo && trackInfo.noPlan)
+            tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; font-weight:bold; color:var(--primary-blue);">هذا المسار بدون خطة، والتسجيل فيه بأرقام الأحاديث (ح ${trackInfo.firstHadith || 1} إلى ${trackInfo.totalHadiths || ""})</td></tr>`;
 
           sched.forEach((item) => {
             let isMemDone = currentStudent.progress?.mem?.includes(item.day);
